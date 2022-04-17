@@ -53,11 +53,11 @@ class MLP_MaskedDropout(nn.Module):
         self.Mask_Dropout=Mask_Dropout()###make it part of the model so it gets the train/eval state
 
 
-    def forward(self,x,masks):
+    def forward(self,x,mask):
       
         x = x.view(x.shape[0], -1)
         x=F.relu(self.fc1(x))
-        x=self.Mask_Dropout(x,masks[0])
+        x=self.Mask_Dropout(x,mask)
         x=F.relu(self.fc2(x))
         #x=Mask_Dropout()(x,masks[1])
         x=self.fc3(x)

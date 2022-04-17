@@ -54,6 +54,47 @@ class FlowFunction(nn.Module):
         return F.embedding(embed_id, self.embed.weight)
 
 
+
+
+class DBModel(nn.Module):
+ 
+    def __init__(self, state_dim,n_action,condition_dim):
+        super().__init__()
+        '''
+        detailed balance model takes in state(binary mask),condition
+        output P_F (size of mask) and P_B(size of mask) and flow of s (size 1)
+        '''
+
+        
+        self.state_dim = state_dim
+        self.n_action=n_action
+
+        self.condition_dim=condition_dim
+
+        self.hidden_dim=16
+        
+        
+        self.FFL1= nn.Linear(state_dim+condition_dim, self.hidden_dim)
+        self.FFL2= nn.Linear(self.hidden_dim, self.hidden_dim)
+        self.outputlayer= nn.Linear(self.hidden_dim, 2*self.n_action+2)#P_F(n_action) + terminate(1) +P_B(n_action) + Flow(1)
+
+
+    def forward(self, state,conditions):       
+        '''
+        state has shape (bsz,state_dim)
+        conditions has shape (bsz, condition_dim)
+        '''
+
+        x=torch.cat([state,conditions],1)
+
+
+        x=nn.LeakyReLU()(self.FFL1(x))
+        x=nn.LeakyReLU()(self.FFL2(x))
+        output=self.outputlayer(x)
+
+        return output
+
+
 if __name__ == "__main__":
     Fnet=FlowFunction(state_dim=3, n_embed=8)
 

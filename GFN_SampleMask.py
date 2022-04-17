@@ -109,9 +109,7 @@ class GFN_SamplingMask(object):
         return state,PossibleActions,LogFlows
 
 
-
-
-    def forward(self,FlowFunction,conditions):
+    def forwardFM(self,FlowFunction,conditions):
         '''
         the flow function conditions on inputs into the task model , the condition has shape (batch_sz, dim)
         '''
@@ -224,8 +222,170 @@ class GFN_SamplingMask(object):
 
         return Match_loss_all
 
+
+    def forwardDB(self,model_DB,conditions):
+        '''
+        in detailed balance the NN predict F, P_F and P_B , the condition has shape (batch_sz, dim)
+        '''
+        batch_size,dim=conditions.shape
+
+        inf = 1000000000
+        minus_inf = -inf
+        logZ_DB = torch.zeros((1,)).to(self.device) # log (initial state flow), Z = 1
+
+        # set PB to uniform distribution (and learn just PF) or not 
+        uniform_PB = False
+
+        trajectory_max_length=int(self.N_units*self.p)      
+
+  
+        self.loss_DB = torch.zeros((batch_size, trajectory_max_length)).to(self.device)
+        # finished trajectories
+        dones = torch.full((batch_size,), False, dtype=torch.bool).to(self.device)
+        states = torch.ones((batch_size, self.N_units), dtype=torch.long).to(self.device)
+        actions = None # (current_batch_size,)
+
+        i = 0
+        while torch.any(~dones):
+
+            ### Forward pass ### 
+            current_batch_size = (~dones).sum()
+            non_terminal_states = states[~dones] # (current_batch_size, ndim)
+            logits = model_DB(non_terminal_states,conditions) # (current_batch_size, output_dim) 
+
+            ### logF ### 
+            logF = logits[...,2*self.N_units+1] # (current_batch_size,)
           
 
+
+            self.loss_DB[~dones,i] += logF # add logF(s_i) to the loss L(s_i, s_{i+1})
+            if i>0: self.loss_DB[~dones,i-1] -= logF # add -logF(s_i) to the loss L(s_{i-1}, s_i)
+            #else : logZ_DB[:] = logF.mean().item() # initial state : Z = F(s_0)
+            else: logZ_DB[:] = logF[0].item() # initial state : Z = F(s_0)
+            
+            ### Backward Policy ### 
+            PB_logits = logits[...,(self.N_units+1):(2*self.N_units+1)] # (current_batch_size, ndim)
+            PB_logits = PB_logits * (0 if uniform_PB else 1) # (current_batch_size, ndim)
+            # Being in a edge cell -- (a zero coordinate), we can't move backward
+            edge_mask = (non_terminal_states == 1).float() # (current_batch_size, ndim)
+            logPB = (PB_logits + minus_inf*edge_mask).log_softmax(1) # (current_batch_size, ndim)
+            # add -logPB(s_{i-1} | s_i) to the loss L(s_{i-1}, s_i)
+            if actions is not None: 
+                """
+                Gather along the parents' dimension (1) to select the logPB of the previously chosen actions, while avoiding the actions leading 
+                to terminal states (action==ndim). The reason of using the previous chosen actions () is that PB is calculated on the same trajectory as PF
+                See below for the calculation of `action`. We avoid actions leading to terminal states because a terminal state can't be parent of another 
+                state
+                """
+                #self.loss_DB[~dones,i-1] -= logPB.gather(1, actions[actions!=ndim].unsqueeze(1)).squeeze(1)
+           
+                self.loss_DB[~dones,i-1] -= logPB.gather(1, actions).squeeze(1)
+        
+            ### Forward Policy ### 
+            PF_logits = logits[...,:(self.N_units)] # (current_batch_size, ndim+1) 
+            # Being in a edge cell ++ (a coordinate that is H), we can't move forward
+            edge_mask = (non_terminal_states == 0).float() # (current_batch_size, ndim)
+            # but any cell can be a terminal cell
+            stop_action_mask = torch.zeros((current_batch_size, 1), device=self.device) # (current_batch_size, 1)
+            # Being in a edge cell, we can't move forward, but any cell can be a terminal cell
+            #PF_mask = torch.cat([edge_mask, stop_action_mask], 1) # (current_batch_size, ndim+1)
+            PF_mask = edge_mask
+            # logPF (with mask)
+            logPF = (PF_logits + minus_inf*PF_mask).log_softmax(1) # (current_batch_size, ndim+1)
+            # choose next states
+            sample_temperature = 1
+            #exp_weight= 0.
+            #sample_ins_probs = (1-exp_weight)*(logPF/sample_temperature).softmax(1) + exp_weight*(1-PF_mask) / (1-PF_mask+0.0000001).sum(1).unsqueeze(1) # (current_batch_size, ndim+1)
+            sample_ins_probs = (logPF/sample_temperature).softmax(1) # (current_batch_size, ndim+1)
+            #actions = torch.distributions.categorical.Categorical(probs = sample_ins_probs).sample() # (current_batch_size,)
+            #actions = torch.multinomial(probs = sample_ins_probs, 1).squeeze(1) # (current_batch_size,) # (current_batch_size,)
+            actions = sample_ins_probs.multinomial(1) # (current_batch_size,)
+
+
+            # add logPF(s_i | s_{i+1}) to the loss L(s_i, s_{i+1}) : gather along the children's dimension (1) to select the logPF for the chosen actions
+            self.loss_DB[~dones,i] += logPF.gather(1, actions).squeeze(1)
+
+            # terminates = (actions==ndim).squeeze(1)
+            # for state in non_terminal_states[terminates]: 
+            #     state_index = get_state_index(state.cpu())
+            #     if first_visit_DB[state_index]<0: first_visit_DB[state_index] = it
+            #     all_visited_DB.append(state_index)
+
+            ####take action
+            with torch.no_grad():
+                #non_terminates = actions[~terminates]
+                #states[~dones] = states[~dones].scatter_add(1, non_terminates, torch.ones(non_terminates.shape, dtype=torch.long, device=self.device))
+                #action ares deactivation of neuron units
+                for j in range(states.shape[0]): 
+                    states[j,actions[j]]=0
+
+            ### select terminal states ### 
+
+            terminates = ((states==0).sum(1)==trajectory_max_length)
+            dones |= terminates
+       
+            i += 1
+
+        #lens = states.sum(1)+1 # number of actions taken for each trajectory
+        #loss = (loss_DB**2).sum()/lens.sum() 
+        #loss = (loss_DB**2).sum(dim=1).sum()/batch_size
+
+        #optimizer.zero_grad()
+        #loss.backward()
+        #optimizer.step()
+
+        # losses_DB.append(loss.item())
+        # R = reward_function(states.float())
+        # rewards_DB.append(R.mean().cpu())
+        # logZ_DB_list.append(logZ_DB.item())
+
+        # if it%100==0: 
+        #     print('\nloss =', np.array(losses_DB[-100:]).mean(), 'logZ =', logZ_DB.item(), "R =", np.array(rewards_DB[-100:]).mean())
+            
+        #     #emp_dist = np.bincount(all_visited_DB[-200000:], minlength=len(true_dist)).astype(float)
+        #     #emp_dist /= emp_dist.sum()
+        #     #l1 = np.abs(true_dist-emp_dist).mean()
+        #     #print('L1 =', l1)
+        #     #l1log_DB.append((len(all_visited_DB), l1))
+
+        # return np.array(losses_DB[-100:]).mean(),logZ_DB.item(),np.array(rewards_DB[-100:]).mean()
+
+        return states
+          
+
+    def DB_train(self,terminal_rewards,optimizer):
+        '''
+        in detailed balance the NN predict F, P_F and P_B , the condition has shape (batch_sz, dim)
+        '''
+        batch_size=terminal_rewards.shape[0]
+
+        self.loss_DB[:,-1] -= (terminal_rewards + 1e-8).log()
+        #lens = states.sum(1)+1 # number of actions taken for each trajectory
+        #loss = (loss_DB**2).sum()/lens.sum() 
+        loss = (self.loss_DB**2).sum(dim=1).sum()/batch_size
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        # losses_DB.append(loss.item())
+        # R = reward_function(states.float())
+        # rewards_DB.append(R.mean().cpu())
+        # logZ_DB_list.append(logZ_DB.item())
+
+        # if it%100==0: 
+        #     print('\nloss =', np.array(losses_DB[-100:]).mean(), 'logZ =', logZ_DB.item(), "R =", np.array(rewards_DB[-100:]).mean())
+            
+        #     #emp_dist = np.bincount(all_visited_DB[-200000:], minlength=len(true_dist)).astype(float)
+        #     #emp_dist /= emp_dist.sum()
+        #     #l1 = np.abs(true_dist-emp_dist).mean()
+        #     #print('L1 =', l1)
+        #     #l1log_DB.append((len(all_visited_DB), l1))
+
+        # return np.array(losses_DB[-100:]).mean(),logZ_DB.item(),np.array(rewards_DB[-100:]).mean()
+
+        return loss.detach().clone()
+          
 
 
     

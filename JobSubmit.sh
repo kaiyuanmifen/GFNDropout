@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=dropout_train
 #SBATCH --gres=gpu:1             # Number of GPUs (per node)
-#SBATCH --mem=65G               # memory (per node)
+#SBATCH --mem=55G               # memory (per node)
 #SBATCH --time=0-4:50            # time (DD-HH:MM)
 
 ###########cluster information above this line
@@ -27,7 +27,9 @@ dim=$3
 
 p=$4
 
-seed=$5
+OODReward=$5
+
+seed=$6
 
 
-python Run_training.py --Data $data --Method $method --Hidden_dim $dim --p $p --seed $seed --Epochs 1000
+python Run_training.py --Data $data --Method $method --Hidden_dim $dim --p $p --seed $seed --Epochs 200 --OODReward ${OODReward}
