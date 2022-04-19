@@ -3,11 +3,11 @@
 
 
 # ############GFN based models
-declare -a all_data=("MNIST" "CIFAR10" "SVHN")
-#declare -a all_data=("SVHN")
+#declare -a all_data=("MNIST" "CIFAR10" "SVHN")
+declare -a all_data=("SVHN")
 
 #declare -a all_methods=("CNN_GFNDB" "MLP_GFNDB" "CNN_GFNFM"  "MLP_GFNFM")
-declare -a all_methods=("CNN_GFNDB")
+declare -a all_methods=("RESNET_GFNDB")
 
 
 #declare -a all_dim=(20 40 80)
@@ -38,7 +38,7 @@ do
 					for round in "${all_rounds[@]}"
 					do
 
-						./JobSubmit.sh $data $method $dim $p $OODReward $round	
+						bash ./JobSubmit.sh $data $method $dim $p $OODReward $round	
 					done
 				done
 			done

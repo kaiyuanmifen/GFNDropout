@@ -716,8 +716,8 @@ if __name__ == "__main__":
     print("masked output")
     print(output)
 
-    #res = ResNet(18, [3,1])
+   
     res = ResNet_Standout(18)
     y = res(torch.randn(4, 3, 224, 224))
-    print(y.size())
-    
+    # print(y.size())
+    # torch.Size([4, 10])

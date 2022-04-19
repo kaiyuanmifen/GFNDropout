@@ -324,6 +324,9 @@ class MLPClassifier:
 		self.max_epoch = max_epoch
 		self.model_type=model_type
 
+		self.num_channels = image_size[0]
+		self.num_resnet_layers = 18
+
 		if self.model_type=="MLP_nodropout":
 		  self.model = MLP(Input_size=image_size[0]*image_size[1]*image_size[2], hidden_size=N_units,droprates=0)
 		
@@ -352,6 +355,22 @@ class MLPClassifier:
 		elif self.model_type=="CNN_SVD":
 			self.model = CNN_SVD(image_size=image_size,hidden_size=N_units,droprates=droprates)
 
+		# ResNet
+		elif self.model_type=="RESNET_nodropout":
+			self.model = ResNet(num_layers=self.num_resnet_layers, img_channels=self.num_channels,hidden_size=N_units,droprates=0)
+		elif self.model_type=="RESNET_dropout":
+			self.model = ResNet(num_layers=self.num_resnet_layers, img_channels = self.num_channels,hidden_size=N_units,droprates=droprates)
+		elif "RESNET_GFN" in self.model_type:
+			self.model = ResNet_MaskedDropout(num_layers = self.num_resnet_layers, img_channels = self.num_channels,hidden_size=N_units,droprates=droprates)
+
+		elif self.model_type=="RESNET_Standout":
+			self.model = ResNet_Standout(num_layers = self.num_resnet_layers, img_channels = self.num_channels,hidden_size=N_units,droprates=droprates)
+
+		elif self.model_type=="RESNET_SVD":
+			self.model = ResNet_SVD(num_layers = self.num_resnet_layers, img_channels = self.num_channels,hidden_size=N_units,droprates=droprates)
+
+		else:
+			raise Exception(f"Could not recognize model type `{self.model_type}` specified.")  	
 
 		self.model.to(device)
 		self.criterion = nn.CrossEntropyLoss().to(device)
