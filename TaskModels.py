@@ -391,10 +391,10 @@ class CNN_SVD(nn.Module):
 # ResNet with SVD, Like CNN_SVD()
 class ResNet_SVD(nn.Module):
    
-    def __init__(self,num_layers,image_size,hidden_size=10,droprates=0,threshold=3):
-        assert num_layers in [18, 34, 50, 101, 152], f'ResNet{num_layers}: Unknown architecture! Number of layers has ' \
-                                                     f'to be 18, 34, 50, 101, or 152 '
-        super(ResNet, self).__init__()
+    def __init__(self,num_layers,img_channels=3,hidden_size=10,droprates=0,threshold=3):
+        super(ResNet_SVD, self).__init__()
+        assert num_layers in [18, 34, 50, 101, 152], "ResNet: Unknown architecture! Number of layers has to be 18, 34, 50, 101, or 152 "
+
         block = Block
         if num_layers < 50:
             self.expansion = 1
@@ -409,7 +409,7 @@ class ResNet_SVD(nn.Module):
         else:
             layers = [3, 8, 36, 3]
         self.in_channels = 64
-        self.conv1 = nn.Conv2d(image_size[0], 64, kernel_size=7, stride=2, padding=3)
+        self.conv1 = nn.Conv2d(img_channels, 64, kernel_size=7, stride=2, padding=3)
         self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU()
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
@@ -463,10 +463,9 @@ class ResNet_SVD(nn.Module):
 # ResNet with Standout, Like CNN_Standout()
 class ResNet_Standout(nn.Module):
    
-    def __init__(self,num_layers,image_size,hidden_size=10,droprates=0 ):
-        assert num_layers in [18, 34, 50, 101, 152], f'ResNet{num_layers}: Unknown architecture! Number of layers has ' \
-                                                     f'to be 18, 34, 50, 101, or 152 '
-        super(ResNet, self).__init__()
+    def __init__(self,num_layers,img_channels=3,hidden_size=10,droprates=0 ):
+        super(ResNet_Standout, self).__init__()
+        assert num_layers in [18, 34, 50, 101, 152], f'Unknown architecture! Number of layers has to be 18, 34, 50, 101, or 152'
         block = Block
         if num_layers < 50:
             self.expansion = 1
@@ -481,7 +480,7 @@ class ResNet_Standout(nn.Module):
         else:
             layers = [3, 8, 36, 3]
         self.in_channels = 64
-        self.conv1 = nn.Conv2d(image_size[0], 64, kernel_size=7, stride=2, padding=3)
+        self.conv1 = nn.Conv2d(img_channels, 64, kernel_size=7, stride=2, padding=3)
         self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU()
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
@@ -515,6 +514,7 @@ class ResNet_Standout(nn.Module):
 
         x = self.avgpool(x)
         x = x.reshape(x.shape[0], -1)
+        import pdb; pdb.set_trace()
 
         previous = x
         x_relu = F.relu(self.fc1(x))
@@ -537,10 +537,10 @@ class ResNet_Standout(nn.Module):
 # ResNet with MaskedDropout like CNN_MaskedDropout()
 class ResNet_MaskedDropout(nn.Module):
    
-    def __init__(self,num_layers,image_size,hidden_size=10,droprates=0 ):
+    def __init__(self,num_layers,img_channels=3,hidden_size=10,droprates=0 ):
         assert num_layers in [18, 34, 50, 101, 152], f'ResNet{num_layers}: Unknown architecture! Number of layers has ' \
                                                      f'to be 18, 34, 50, 101, or 152 '
-        super(ResNet, self).__init__()
+        super(ResNet_MaskedDropout, self).__init__()
         block = Block
         if num_layers < 50:
             self.expansion = 1
@@ -555,7 +555,7 @@ class ResNet_MaskedDropout(nn.Module):
         else:
             layers = [3, 8, 36, 3]
         self.in_channels = 64
-        self.conv1 = nn.Conv2d(image_size[0], 64, kernel_size=7, stride=2, padding=3)
+        self.conv1 = nn.Conv2d(img_channels, 64, kernel_size=7, stride=2, padding=3)
         self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU()
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
@@ -624,7 +624,7 @@ class ResNet_MaskedDropout(nn.Module):
 # ResNet with DIY_Dropout, Like CNN()
 class ResNet(nn.Module):
    
-    def __init__(self,num_layers,image_size,hidden_size=10,droprates=0,threshold=3 ):
+    def __init__(self,num_layers,img_channels=3,hidden_size=10,droprates=0,threshold=3 ):
         assert num_layers in [18, 34, 50, 101, 152], f'ResNet{num_layers}: Unknown architecture! Number of layers has ' \
                                                      f'to be 18, 34, 50, 101, or 152 '
         super(ResNet, self).__init__()
@@ -642,7 +642,7 @@ class ResNet(nn.Module):
         else:
             layers = [3, 8, 36, 3]
         self.in_channels = 64
-        self.conv1 = nn.Conv2d(image_size[0], 64, kernel_size=7, stride=2, padding=3)
+        self.conv1 = nn.Conv2d(img_channels, 64, kernel_size=7, stride=2, padding=3)
         self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU()
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
@@ -674,6 +674,7 @@ class ResNet(nn.Module):
 
         x = self.avgpool(x)
         x = x.reshape(x.shape[0], -1)
+       
         x = self.fc1(x)
         x= self.DIY_Dropout(x)
         x= self.fc2(x)
@@ -714,3 +715,9 @@ if __name__ == "__main__":
 
     print("masked output")
     print(output)
+
+    #res = ResNet(18, [3,1])
+    res = ResNet_Standout(18)
+    y = res(torch.randn(4, 3, 224, 224))
+    print(y.size())
+    
