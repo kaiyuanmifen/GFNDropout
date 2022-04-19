@@ -12,7 +12,7 @@ class FlowFunction(nn.Module):
         super().__init__()
 
         self.embedding_dim = 16
-        self.hidden_dim=16
+        self.hidden_dim=128
 
         self.state_dim = state_dim
         self.n_action=n_action
@@ -71,7 +71,7 @@ class DBModel(nn.Module):
 
         self.condition_dim=condition_dim
 
-        self.hidden_dim=16
+        self.hidden_dim=128
         
         
         self.FFL1= nn.Linear(state_dim+condition_dim, self.hidden_dim)
@@ -86,7 +86,6 @@ class DBModel(nn.Module):
         '''
 
         x=torch.cat([state,conditions],1)
-
 
         x=nn.LeakyReLU()(self.FFL1(x))
         x=nn.LeakyReLU()(self.FFL2(x))

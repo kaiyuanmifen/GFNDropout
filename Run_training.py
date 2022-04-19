@@ -87,7 +87,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 ####part 1 load MNIST/CIFAR data
-batch_size=256
+batch_size=128
 if args.Data=="MNIST":
 
 	transform = transforms.Compose([transforms.ToTensor(), \
@@ -252,8 +252,8 @@ if args.Data=="SVHN":
 
 	trainset =torch.utils.data.Subset(trainset, indices)
 
-	#indices = torch.randperm(len(testset))[:300]
-	indices = torch.randperm(len(testset))
+	indices = torch.randperm(len(testset))[:10000]
+	#indices = torch.randperm(len(testset))
 
 	testset  =torch.utils.data.Subset(testset, indices)
 	
@@ -316,7 +316,7 @@ if args.Data=="SVHN":
 #part 2 function to run the task
 
 class MLPClassifier:
-	def __init__(self, Input_size,droprates=0.5, batch_size=128, max_epoch=10, \
+	def __init__(self, image_size,droprates=0.5, batch_size=128, max_epoch=10, \
 				 lr=0.001, momentum=0,model_type="MLP_nodropout",N_units=50):
 		# Wrap MLP model
 		self.droprates = droprates
@@ -325,21 +325,32 @@ class MLPClassifier:
 		self.model_type=model_type
 
 		if self.model_type=="MLP_nodropout":
-		  self.model = MLP(Input_size=Input_size, hidden_size=N_units,droprates=0)
+		  self.model = MLP(Input_size=image_size[0]*image_size[1]*image_size[2], hidden_size=N_units,droprates=0)
 		
 		elif self.model_type=="MLP_dropout":
-		  self.model = MLP(Input_size=Input_size, hidden_size=N_units,droprates=droprates)
-		elif self.model_type=="CNN":
-		  self.model = CNN(droprates)
-		elif "GFN" in self.model_type:
-		  self.model = MLP_MaskedDropout(Input_size=Input_size,hidden_size=N_units)
+		  self.model = MLP(Input_size=image_size[0]*image_size[1]*image_size[2], hidden_size=N_units,droprates=droprates)
+
+		elif "MLP_GFN" in self.model_type:
+		  self.model = MLP_MaskedDropout(Input_size=image_size[0]*image_size[1]*image_size[2],hidden_size=N_units)
 
 		elif self.model_type=="MLP_SVD":
-			self.model = MLP_SVD(Input_size=Input_size,hidden_size=N_units)
+			self.model = MLP_SVD(Input_size=image_size[0]*image_size[1]*image_size[2],hidden_size=N_units)
 		elif self.model_type=="MLP_Standout":
-			self.model = MLP_Standout(Input_size=Input_size,hidden_size=N_units,droprates=droprates)
+			self.model = MLP_Standout(Input_size=image_size[0]*image_size[1]*image_size[2],hidden_size=N_units,droprates=droprates)
+		###CNN
 
+		elif self.model_type=="CNN_nodropout":
+		  self.model = CNN(image_size=image_size,hidden_size=N_units,droprates=0)
+		elif self.model_type=="CNN_dropout":
+		  self.model = CNN(image_size=image_size,hidden_size=N_units,droprates=droprates)
+		elif "CNN_GFN" in self.model_type:
+			self.model = CNN_MaskedDropout(image_size=image_size,hidden_size=N_units,droprates=droprates)
 
+		elif self.model_type=="CNN_Standout":
+			self.model = CNN_Standout(image_size=image_size,hidden_size=N_units,droprates=droprates)
+
+		elif self.model_type=="CNN_SVD":
+			self.model = CNN_SVD(image_size=image_size,hidden_size=N_units,droprates=droprates)
 
 
 		self.model.to(device)
@@ -357,7 +368,7 @@ class MLPClassifier:
 		if "GFNFM" in self.model_type:
 			self.GFN_operation=GFN_SamplingMask(N_units=N_units,batch_size=batch_size,device=device,p=droprates,Gamma=0.05)
 
-			self.Fnet=FlowFunction(state_dim=N_units, n_action=N_units,condition_dim=Input_size).to(device)
+			self.Fnet=FlowFunction(state_dim=N_units, n_action=N_units,condition_dim=N_units).to(device)
 
 			self.optimizer_GFN = optim.Adam(self.Fnet.parameters(), lr=lr)
 		
@@ -366,7 +377,7 @@ class MLPClassifier:
 		elif "GFNDB" in self.model_type:
 			self.GFN_operation=GFN_SamplingMask(N_units=N_units,batch_size=batch_size,device=device,p=droprates,Gamma=0.05)
 
-			self.model_DB=DBModel(state_dim=N_units, n_action=N_units,condition_dim=Input_size).to(device)
+			self.model_DB=DBModel(state_dim=N_units, n_action=N_units,condition_dim=N_units).to(device)
 
 			self.optimizer_GFN = optim.Adam(self.model_DB.parameters(), lr=lr)
 		
@@ -412,10 +423,12 @@ class MLPClassifier:
 							augmented_inputs.append(augmenter(inputs_.detach().clone()).to(device))
 				   	
 			   	###forward
-				if  self.model_type=="MLP_GFNFM":
+				if  "GFNFM" in self.model_type:
 					
 					self.GFN_operation.reset()
-					selected_=self.GFN_operation.forwardFM(FlowFunction=self.Fnet,conditions=inputs.reshape(inputs.shape[0],-1))
+
+					condition=self.model.Get_condition(inputs).detach().clone().to(device)
+					selected_=self.GFN_operation.forwardFM(FlowFunction=self.Fnet,conditions=condition)
 
 					#selected_ = torch.zeros((inputs.shape[0],10)).uniform_(0,1)>0.5
 					masks=selected_					
@@ -431,12 +444,15 @@ class MLPClassifier:
 								augmented_ouputs.append(augmented_output.detach().clone())
 
 
-				elif  self.model_type=="MLP_GFNDB":
+				elif  "GFNDB" in self.model_type:
 
 					self.GFN_operation.reset()
 
 					###forwardDB will auotmatically reset the vectors for DB operations
-					selected_=self.GFN_operation.forwardDB(model_DB=self.model_DB,conditions=inputs.reshape(inputs.shape[0],-1))
+
+					condition=self.model.Get_condition(inputs).detach().clone().to(device)
+
+					selected_=self.GFN_operation.forwardDB(model_DB=self.model_DB,conditions=condition)
 
 					#selected_ = torch.zeros((inputs.shape[0],10)).uniform_(0,1)>0.5
 					masks=selected_
@@ -482,13 +498,13 @@ class MLPClassifier:
 				
 						rewards=torch.exp(-beta*(loss_batch+loss_augmentation_batch)).detach().clone()
 						
-				if self.model_type=="MLP_GFNFM":
+				if "GFNFM" in self.model_type:
 					self.optimizer_GFN.zero_grad()
 					GFN_loss=self.GFN_operation.CalculateFlowMatchingLoss(self.Fnet,rewards,conditions=inputs.reshape(inputs.shape[0],-1).detach().clone())
 					GFN_loss.backward()
 					self.optimizer_GFN.step()
 
-				if self.model_type=="MLP_GFNDB":
+				if "GFNDB" in self.model_type:
 					
 					GFN_loss=self.GFN_operation.DB_train(rewards,self.optimizer_GFN)
 					
@@ -540,13 +556,16 @@ class MLPClassifier:
 		# Used to keep all test errors after each epoch
 		model = self.model.eval()
 		with torch.no_grad():
-			if self.model_type=="MLP_GFNFM":
+			if "GFNFM" in self.model_type:
 				N_repeats=11
 				outputs=[]
 				for j in range(N_repeats):#repeat N times and sample the distribution
 					self.GFN_operation.reset()
 					self.GFN_operation.Train=False
-					selected_=self.GFN_operation.forwardFM(FlowFunction=self.Fnet,conditions=x.reshape(x.shape[0],-1))
+
+					condition=self.model.Get_condition(x).detach().clone().to(device)
+					
+					selected_=self.GFN_operation.forwardFM(FlowFunction=self.Fnet,conditions=condition)
 
 					#selected_ = torch.zeros((inputs.shape[0],10)).uniform_(0,1)>0.5
 					mask=selected_
@@ -558,7 +577,7 @@ class MLPClassifier:
 				outputs=outputs.mean(0)
 
 
-			elif self.model_type=="MLP_GFNDB":
+			elif "GFNDB" in self.model_type:
 				N_repeats=11
 				outputs=[]
 				for j in range(N_repeats):#repeat N times and sample the distribution
@@ -566,7 +585,11 @@ class MLPClassifier:
 					self.GFN_operation.Train=False
 
 					###forwardDB will auotmatically reset the vectors for DB operations
-					selected_=self.GFN_operation.forwardDB(model_DB=self.model_DB,conditions=x.reshape(x.shape[0],-1))
+					
+					
+					condition=self.model.Get_condition(x).detach().clone().to(device)
+					
+					selected_=self.GFN_operation.forwardDB(model_DB=self.model_DB,conditions=condition)
 
 					#selected_ = torch.zeros((inputs.shape[0],10)).uniform_(0,1)>0.5
 					mask=selected_
@@ -598,13 +621,16 @@ class MLPClassifier:
 # Define networks
 
 if args.Data=="MNIST":
-	Input_size=28*28
+	#Input_size=28*28
+	image_size=(1,28,28)
 elif args.Data=="CIFAR10":
-	Input_size=3*32*32
+	#Input_size=3*32*32
+	image_size=(3,32,32)
 elif args.Data=="SVHN":
-	Input_size=3*32*32
+	#Input_size=3*32*32
+	image_size=(3,32,32)
 
-mlp1 = [MLPClassifier(droprates=args.p,Input_size=Input_size,max_epoch=args.Epochs,model_type=args.Method,N_units=args.Hidden_dim)]
+mlp1 = [MLPClassifier(droprates=args.p,image_size=image_size,max_epoch=args.Epochs,model_type=args.Method,N_units=args.Hidden_dim)]
 
 # mlp1 = [MLPClassifier(droprates=[0.0, 0.5], max_epoch=3,model_type="MLP"),
 #         MLPClassifier(droprates=[0.0, 0.0], max_epoch=3,model_type="MLP_GFN"),

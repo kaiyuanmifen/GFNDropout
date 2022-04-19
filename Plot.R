@@ -49,34 +49,46 @@ names(Data)
 head(Data)
 #Data=Data[Data$Method!="MLP_SVD",]
 
-DataNames="MNIST"#CIFAR10 MNIST
-N_units=200
-p=0.2
-OODReward=0
-VecPlot1=Data[(Data$Data==DataNames)&(Data$Method%in%c("MLP_GFNDB","MLP_GFNFM"))&(Data$N_units==N_units)&(Data$p==p)&(Data$OODReward==OODReward),]
-VecPlot2=Data[(Data$Data==DataNames)&(Data$Method%in%c("MLP_dropout","MLP_Standout"))&(Data$N_units==N_units)&(Data$p==p),]
-VecPlot3=Data[(Data$Data==DataNames)&(Data$Method%in%c( "MLP_nodropout","MLP_SVD"))&(Data$N_units==N_units),]
+for (Model in c("CNN","MLP")){
+  for (DataNames in c("SVHN", "CIFAR10","MNIST")){
+    for (N_units in c(20,40,80)){
+      for (p in c(0.1,0.2,0.5,0.7,0.9)){
+        for (OODReward in c(1,0)){
+
+Exp=paste0(Model,"_",DataNames,"_",N_units,"_",p,"_",OODReward)
+          
+VecPlot1=Data[(Data$Data==DataNames)&(Data$Method%in%paste0(Model,c("_GFNDB","_GFNFM")))&(Data$N_units==N_units)&(Data$p==p)&(Data$OODReward==OODReward),]
+VecPlot2=Data[(Data$Data==DataNames)&(Data$Method%in%paste0(Model,c("_dropout","_Standout")))&(Data$N_units==N_units)&(Data$p==p),]
+VecPlot3=Data[(Data$Data==DataNames)&(Data$Method%in%paste0(Model,c( "_nodropout","_SVD")))&(Data$N_units==N_units),]
+
+
+# VecPlot1=Data[(Data$Data==DataNames)&(Data$Method%in%c("CNN_GFNDB","CNN_GFNFM"))&(Data$N_units==N_units)&(Data$p==p)&(Data$OODReward==OODReward),]
+# VecPlot2=Data[(Data$Data==DataNames)&(Data$Method%in%c("CNN_dropout","CNN_Standout"))&(Data$N_units==N_units)&(Data$p==p),]
+# VecPlot3=Data[(Data$Data==DataNames)&(Data$Method%in%c( "CNN_nodropout","CNN_SVD"))&(Data$N_units==N_units),]
+
 
 VecPlot=rbind(VecPlot1,VecPlot2,VecPlot3)
 
 head(VecPlot)
-p <- ggplot(VecPlot, aes(x=Epoch, y=test_acc,color=Method)) +geom_line()+
+Plot <- ggplot(VecPlot, aes(x=Epoch, y=test_acc,color=Method)) +geom_line()+
   ggtitle(DataNames)
-p
 
-ggsave(plot = p,paste0('images/',DataNames,"_testacc.png"),scale=3)
+
+ggsave(plot = Plot,paste0('images/',Exp,"_testacc.png"),scale=3)
 
 
 head(VecPlot)
-p <- ggplot(VecPlot, aes(x=Epoch, y=test_acc_OOD,color=Method)) +geom_line()+
+Plot <- ggplot(VecPlot, aes(x=Epoch, y=test_acc_OOD,color=Method)) +geom_line()+
   ggtitle(DataNames)
-p
-
-ggsave(plot = p,paste0('images/',DataNames,"_testaccOOD.png"),scale=3)
 
 
+ggsave(plot = Plot,paste0('images/',Exp,"_testaccOOD.png"),scale=3)
+        }
 
-
+      }
+    }
+  }
+}
 # 
 # for (DataNames in c("MNIST","CIFAR10")){
 # 

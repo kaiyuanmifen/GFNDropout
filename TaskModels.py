@@ -20,8 +20,8 @@ class MLP(nn.Module):
     def __init__(self,Input_size, hidden_size=10, droprates=0):
         super(MLP, self).__init__()
 
-        self.fc1 = nn.Linear(Input_size,hidden_size)
-        self.fc2 = nn.Linear(hidden_size,hidden_size)
+        self.fc1 = nn.Linear(Input_size,4*hidden_size)
+        self.fc2 = nn.Linear(4*hidden_size,hidden_size)
         self.fc3 = nn.Linear(hidden_size, 10)
 
 
@@ -34,8 +34,9 @@ class MLP(nn.Module):
         x = x.view(x.shape[0], -1)
         #x=DIY_Dropout(p=self.droprates[0])(x)
         x=F.relu(self.fc1(x))
-        x=self.DIY_Dropout(x)
+        
         x=F.relu(self.fc2(x))
+        x=self.DIY_Dropout(x)
         #x=DIY_Dropout(p=self.droprates[1])(x)
         x=self.fc3(x)
         return x
@@ -46,8 +47,8 @@ class MLP_MaskedDropout(nn.Module):
         super(MLP_MaskedDropout, self).__init__()
 
   
-        self.fc1 = nn.Linear(Input_size,hidden_size)
-        self.fc2 = nn.Linear(hidden_size,hidden_size)
+        self.fc1 = nn.Linear(Input_size,4*hidden_size)
+        self.fc2 = nn.Linear(4*hidden_size,hidden_size)
         self.fc3 = nn.Linear(hidden_size, 10)
 
         self.Mask_Dropout=Mask_Dropout()###make it part of the model so it gets the train/eval state
@@ -57,11 +58,20 @@ class MLP_MaskedDropout(nn.Module):
       
         x = x.view(x.shape[0], -1)
         x=F.relu(self.fc1(x))
-        x=self.Mask_Dropout(x,mask)
         x=F.relu(self.fc2(x))
+        x=self.Mask_Dropout(x,mask)
         #x=Mask_Dropout()(x,masks[1])
         x=self.fc3(x)
         return x
+
+    def Get_condition(self,x):
+
+        x = x.view(x.shape[0], -1)
+        x=F.relu(self.fc1(x))
+        x=F.relu(self.fc2(x))
+
+        return x
+
 
 
 ####sparse variational dropout
@@ -108,8 +118,8 @@ class MLP_SVD(nn.Module):
         super(MLP_SVD, self).__init__()
 
         #self.fc1 = nn.Linear(28*28,hidden_size)
-        self.fc1 = LinearSVDO(Input_size, hidden_size, threshold)
-        self.fc2 = nn.Linear(hidden_size,hidden_size)
+        self.fc1 = nn.Linear(Input_size,4*hidden_size)
+        self.fc2 = LinearSVDO(4*hidden_size, hidden_size, threshold) 
         self.fc3 = nn.Linear(hidden_size, 10)
 
     def forward(self, x):
@@ -171,24 +181,27 @@ class MLP_Standout(nn.Module):
     def __init__(self,Input_size, hidden_size=10,droprates=0.5):
         super(MLP_Standout, self).__init__()
 
-        self.fc1 = nn.Linear(Input_size,hidden_size)
+        self.fc1 = nn.Linear(Input_size,4*hidden_size)
         
-        self.fc1_drop = Standout(self.fc1, droprates, 1)
+        
+        self.fc2 = nn.Linear(4*hidden_size,hidden_size)
+        
+        self.fc2_drop = Standout(self.fc2, droprates, 1)
 
-        self.fc2 = nn.Linear(hidden_size,hidden_size)
+
         self.fc3 = nn.Linear(hidden_size, 10)
 
     def forward(self, x):
       
         x = x.view(x.shape[0], -1)
         #x=DIY_Dropout(p=self.droprates[0])(x)
-      
-        previous = x
-        x_relu = F.relu(self.fc1(x))
-        # Select between dropouts styles
-        x = self.fc1_drop(previous, x_relu)
+        
+        x= F.relu(self.fc1(x))
 
-        x=F.relu(self.fc2(x))
+        previous = x
+        x_relu = F.relu(self.fc2(x))
+        # Select between dropouts styles
+        x = self.fc2_drop(previous, x_relu)
         #x=DIY_Dropout(p=self.droprates[1])(x)
         x=self.fc3(x)
 
@@ -197,28 +210,179 @@ class MLP_Standout(nn.Module):
 
 ##########CNN code 
 class CNN(nn.Module):
-    def __init__(self,droprates=[0, 0]):
+    def __init__(self,image_size,hidden_size=10,droprates=0):
         super(CNN, self).__init__()
-        self.conv1 = nn.Conv2d(1, 32, kernel_size=5)
+        self.conv1 = nn.Conv2d(image_size[0], 32, kernel_size=5)
         self.conv2 = nn.Conv2d(32, 32, kernel_size=5)
         self.conv3 = nn.Conv2d(32,64, kernel_size=5)
-        self.fc1 = nn.Linear(3*3*64, 64)
-        self.fc2 = nn.Linear(64, 10)
+
+        self.image_size=image_size
+        if self.image_size[1]==28:
+            self.CNNoutputsize=3*3*64
+        elif self.image_size[1]==32:
+            self.CNNoutputsize=4*4*64
+
+
+        self.fc1 = nn.Linear(self.CNNoutputsize, hidden_size)
+        self.fc2 = nn.Linear(hidden_size, 10)
 
         self.droprates=droprates
 
+        self.DIY_Dropout=DIY_Dropout(droprates)###make it part of the model so it gets the train/eval state
+
+
     def forward(self, x):
 
-        x=F.dropout(x, p=self.droprates[0], training=self.training)
+        #x=F.dropout(x, p=self.droprates[0], training=self.training)
         x = F.relu(self.conv1(x))
         #x = F.dropout(x, p=0.5, training=self.training)
         x = F.relu(F.max_pool2d(self.conv2(x), 2))
-        x = F.dropout(x, p=self.droprates[1], training=self.training)
+        #x = F.dropout(x, p=self.droprates[1], training=self.training)
         x = F.relu(F.max_pool2d(self.conv3(x),2))
-        x = F.dropout(x, p=self.droprates[1], training=self.training)
-        x = x.view(-1,3*3*64 )
+        #x = F.dropout(x, p=self.droprates[1], training=self.training)
+        x = x.view(-1,self.CNNoutputsize)
         x = F.relu(self.fc1(x))
-        x = F.dropout(x, p=self.droprates[1],training=self.training)
+        x=self.DIY_Dropout(x)
+        #x = F.dropout(x, p=self.droprates[1],training=self.training)
+        x = self.fc2(x)
+        return x
+
+class CNN_MaskedDropout(nn.Module):
+    def __init__(self,image_size,hidden_size=10,droprates=0):
+        super(CNN_MaskedDropout, self).__init__()
+        self.conv1 = nn.Conv2d(image_size[0], 32, kernel_size=5)
+        self.conv2 = nn.Conv2d(32, 32, kernel_size=5)
+        self.conv3 = nn.Conv2d(32,64, kernel_size=5)
+
+        self.image_size=image_size
+        if self.image_size[1]==28:
+            self.CNNoutputsize=3*3*64
+        elif self.image_size[1]==32:
+            self.CNNoutputsize=4*4*64
+
+        self.fc1 = nn.Linear(self.CNNoutputsize, hidden_size)
+        self.fc2 = nn.Linear(hidden_size, 10)
+
+        self.droprates=droprates
+
+        self.Mask_Dropout=Mask_Dropout()###make it part of the model so it gets the train/eval state
+
+
+    def forward(self, x,mask):
+
+        #x=F.dropout(x, p=self.droprates[0], training=self.training)
+        x = F.relu(self.conv1(x))
+        #x = F.dropout(x, p=0.5, training=self.training)
+        x = F.relu(F.max_pool2d(self.conv2(x), 2))
+        #x = F.dropout(x, p=self.droprates[1], training=self.training)
+        x = F.relu(F.max_pool2d(self.conv3(x),2))
+        #x = F.dropout(x, p=self.droprates[1], training=self.training)
+        x = x.view(-1,self.CNNoutputsize)
+        x = F.relu(self.fc1(x))
+        x=self.Mask_Dropout(x,mask)
+        #x = F.dropout(x, p=self.droprates[1],training=self.training)
+        x = self.fc2(x)
+        return x
+
+    def Get_condition(self, x):
+
+        #x=F.dropout(x, p=self.droprates[0], training=self.training)
+        x = F.relu(self.conv1(x))
+        #x = F.dropout(x, p=0.5, training=self.training)
+        x = F.relu(F.max_pool2d(self.conv2(x), 2))
+        #x = F.dropout(x, p=self.droprates[1], training=self.training)
+        x = F.relu(F.max_pool2d(self.conv3(x),2))
+        #x = F.dropout(x, p=self.droprates[1], training=self.training)
+        x = x.view(-1,self.CNNoutputsize)
+        x = F.relu(self.fc1(x))
+     
+        return x
+
+
+class CNN_Standout(nn.Module):
+    def __init__(self,image_size,hidden_size=10,droprates=0):
+        super(CNN_Standout, self).__init__()
+        self.conv1 = nn.Conv2d(image_size[0], 32, kernel_size=5)
+        self.conv2 = nn.Conv2d(32, 32, kernel_size=5)
+        self.conv3 = nn.Conv2d(32,64, kernel_size=5)
+
+
+
+        self.image_size=image_size
+        if self.image_size[1]==28:
+            self.CNNoutputsize=3*3*64
+        elif self.image_size[1]==32:
+            self.CNNoutputsize=4*4*64
+
+        self.fc1 = nn.Linear(self.CNNoutputsize, hidden_size)
+
+
+        self.fc1_drop = Standout(self.fc1, droprates, 1)
+
+        self.fc2 = nn.Linear(hidden_size, 10)
+
+        self.droprates=droprates
+
+        
+
+    def forward(self, x):
+
+        #x=F.dropout(x, p=self.droprates[0], training=self.training)
+        x = F.relu(self.conv1(x))
+        #x = F.dropout(x, p=0.5, training=self.training)
+        x = F.relu(F.max_pool2d(self.conv2(x), 2))
+        #x = F.dropout(x, p=self.droprates[1], training=self.training)
+        x = F.relu(F.max_pool2d(self.conv3(x),2))
+        #x = F.dropout(x, p=self.droprates[1], training=self.training)
+        x = x.view(-1,self.CNNoutputsize )
+        
+        previous = x
+        x_relu = F.relu(self.fc1(x))
+        # Select between dropouts styles
+        x = self.fc1_drop(previous, x_relu)
+        #x=self.DIY_Dropout(x)
+        #x = F.dropout(x, p=self.droprates[1],training=self.training)
+        x = self.fc2(x)
+        return x
+
+class CNN_SVD(nn.Module):
+    def __init__(self,image_size,hidden_size=10,droprates=0,threshold=3):
+        super(CNN_SVD, self).__init__()
+        
+
+        self.conv1 = nn.Conv2d(image_size[0], 32, kernel_size=5)
+        self.conv2 = nn.Conv2d(32, 32, kernel_size=5)
+        self.conv3 = nn.Conv2d(32,64, kernel_size=5)
+        #self.fc1 = nn.Linear(3*3*64, hidden_size)
+        
+        self.image_size=image_size
+        if self.image_size[1]==28:
+            self.CNNoutputsize=3*3*64
+        elif self.image_size[1]==32:
+            self.CNNoutputsize=4*4*64
+        
+        self.fc1 = LinearSVDO(self.CNNoutputsize, hidden_size, threshold) 
+        
+        self.fc2 = nn.Linear(hidden_size, 10)
+
+        self.droprates=droprates
+
+        self.DIY_Dropout=DIY_Dropout(droprates)###make it part of the model so it gets the train/eval state
+
+
+    def forward(self, x):
+
+        #x=F.dropout(x, p=self.droprates[0], training=self.training)
+        x = F.relu(self.conv1(x))
+        #x = F.dropout(x, p=0.5, training=self.training)
+        x = F.relu(F.max_pool2d(self.conv2(x), 2))
+        #x = F.dropout(x, p=self.droprates[1], training=self.training)
+        x = F.relu(F.max_pool2d(self.conv3(x),2))
+        #x = F.dropout(x, p=self.droprates[1], training=self.training)
+
+        x = x.view(-1,self.CNNoutputsize )
+        x = F.relu(self.fc1(x))
+        #x = F.dropout(x, p=self.droprates[1],training=self.training)
         x = self.fc2(x)
         return x
 

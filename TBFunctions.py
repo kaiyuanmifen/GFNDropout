@@ -18,7 +18,7 @@ class Prob_FB(nn.Module):
         '''
 
         self.embedding_dim = 32
-        self.hidden_dim=32
+        self.hidden_dim=256
 
         self.state_dim = state_dim
         self.max_k=max_k+1#the initial state (all ones) included

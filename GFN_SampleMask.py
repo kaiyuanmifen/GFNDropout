@@ -236,13 +236,14 @@ class GFN_SamplingMask(object):
         # set PB to uniform distribution (and learn just PF) or not 
         uniform_PB = False
 
-        trajectory_max_length=int(self.N_units*self.p)      
+        trajectory_max_length=int(self.N_units*(1.0-self.p))      
 
   
         self.loss_DB = torch.zeros((batch_size, trajectory_max_length)).to(self.device)
         # finished trajectories
         dones = torch.full((batch_size,), False, dtype=torch.bool).to(self.device)
-        states = torch.ones((batch_size, self.N_units), dtype=torch.long).to(self.device)
+        #start with state all zeros, fill in 1 ones
+        states = torch.zeros((batch_size, self.N_units), dtype=torch.long).to(self.device)
         actions = None # (current_batch_size,)
 
         i = 0
@@ -284,7 +285,7 @@ class GFN_SamplingMask(object):
             ### Forward Policy ### 
             PF_logits = logits[...,:(self.N_units)] # (current_batch_size, ndim+1) 
             # Being in a edge cell ++ (a coordinate that is H), we can't move forward
-            edge_mask = (non_terminal_states == 0).float() # (current_batch_size, ndim)
+            edge_mask = (non_terminal_states == 1).float() # (current_batch_size, ndim)
             # but any cell can be a terminal cell
             stop_action_mask = torch.zeros((current_batch_size, 1), device=self.device) # (current_batch_size, 1)
             # Being in a edge cell, we can't move forward, but any cell can be a terminal cell
@@ -317,11 +318,11 @@ class GFN_SamplingMask(object):
                 #states[~dones] = states[~dones].scatter_add(1, non_terminates, torch.ones(non_terminates.shape, dtype=torch.long, device=self.device))
                 #action ares deactivation of neuron units
                 for j in range(states.shape[0]): 
-                    states[j,actions[j]]=0
+                    states[j,actions[j]]=1
 
             ### select terminal states ### 
 
-            terminates = ((states==0).sum(1)==trajectory_max_length)
+            terminates = ((states==1).sum(1)==trajectory_max_length)
             dones |= terminates
        
             i += 1
