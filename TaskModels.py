@@ -514,7 +514,7 @@ class ResNet_Standout(nn.Module):
 
         x = self.avgpool(x)
         x = x.reshape(x.shape[0], -1)
-        import pdb; pdb.set_trace()
+        
 
         previous = x
         x_relu = F.relu(self.fc1(x))
@@ -718,6 +718,6 @@ if __name__ == "__main__":
 
    
     res = ResNet_Standout(18)
-    y = res(torch.randn(4, 3, 224, 224))
+    y = res(torch.randn(4, 3, 32, 32))
     # print(y.size())
     # torch.Size([4, 10])

@@ -326,7 +326,6 @@ class MLPClassifier:
 
 		self.num_channels = image_size[0]
 		self.num_resnet_layers = 18
-
 		if self.model_type=="MLP_nodropout":
 		  self.model = MLP(Input_size=image_size[0]*image_size[1]*image_size[2], hidden_size=N_units,droprates=0)
 		

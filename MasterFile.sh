@@ -38,7 +38,7 @@ do
 					for round in "${all_rounds[@]}"
 					do
 
-						bash ./JobSubmit.sh $data $method $dim $p $OODReward $round	
+						sbatch ./JobSubmit.sh $data $method $dim $p $OODReward $round	
 					done
 				done
 			done
