@@ -2,7 +2,7 @@
 #SBATCH --job-name=dropout_train
 #SBATCH --gres=gpu:1             # Number of GPUs (per node)
 #SBATCH --mem=65G               # memory (per node)
-#SBATCH --time=0-5:50            # time (DD-HH:MM)
+#SBATCH --time=2-5:50            # time (DD-HH:MM)
 #SBATCH --error=/home/mila/c/chris.emezue/GFNDropout/slurmerror_gfn.txt
 #SBATCH --output=/home/mila/c/chris.emezue/GFNDropout/slurmoutput_gfn.txt
 

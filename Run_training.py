@@ -79,10 +79,6 @@ print("task:",Task_name)
 
 
 
-
-
-
-
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
@@ -662,7 +658,9 @@ mlp1 = [MLPClassifier(droprates=args.p,image_size=image_size,max_epoch=args.Epoc
 # Save torch models
 for ind, mlp in enumerate(mlp1):
 	#torch.save(mlp.model, 'mnist_mlp1_'+str(ind)+'.pth')
-	torch.save(mlp.model, "checkpoints/"+Task_name+'.pth')
+
+	#Chrs Emezue: saving in scratch due to file size.
+	torch.save(mlp.model, "/home/mila/c/chris.emezue/scratch/gfndropout/checkpoints/"+Task_name+'.pth')
 	# Prepare to save errors
 	mlp.test_error = list(map(str, mlp.test_error))
 
