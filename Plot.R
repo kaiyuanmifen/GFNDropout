@@ -51,8 +51,8 @@ head(Data)
 
 for (Model in c("RESNET")){
   for (DataNames in c("SVHN", "CIFAR10","MNIST")){
-    for (N_units in c(20,40,80)){
-      for (p in c(0.1,0.2,0.5,0.7,0.9)){
+    for (N_units in c(40)){
+      for (p in c(0.5)){
         for (OODReward in c(1,0)){
 
 Exp=paste0(Model,"_",DataNames,"_",N_units,"_",p,"_",OODReward)
