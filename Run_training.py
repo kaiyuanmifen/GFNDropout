@@ -692,6 +692,6 @@ for i, r in enumerate(mlp1_test_errors):
 plt.legend(loc=1);
 plt.xlabel('Epochs');
 plt.ylabel('Number of errors in test set');
-plt.title('Test error on MNIST dataset for Multilayer Perceptron')
+plt.title('Test error on MNIST dataset for RESNET')
 plt.savefig('Results/'+Task_name+'PerformanceVsepisodes.png')
 plt.clf()

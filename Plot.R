@@ -49,7 +49,7 @@ names(Data)
 head(Data)
 #Data=Data[Data$Method!="MLP_SVD",]
 
-for (Model in c("CNN","MLP")){
+for (Model in c("RESNET")){
   for (DataNames in c("SVHN", "CIFAR10","MNIST")){
     for (N_units in c(20,40,80)){
       for (p in c(0.1,0.2,0.5,0.7,0.9)){
