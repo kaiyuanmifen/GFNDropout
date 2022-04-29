@@ -3,11 +3,11 @@
 
 
 # ############GFN based models
-declare -a all_data=("MNIST" "CIFAR10" "SVHN")
-#declare -a all_data=("SVHN")
+#declare -a all_data=("MNIST" "CIFAR10" "SVHN")
+declare -a all_data=("MNIST")
 
 #declare -a all_methods=("CNN_GFNDB" "MLP_GFNDB" "CNN_GFNFM"  "MLP_GFNFM")
-declare -a all_methods=("CNN_GFNDB")
+declare -a all_methods=("MLP_GFFN")
 
 
 #declare -a all_dim=(20 40 80)
@@ -16,7 +16,8 @@ declare -a all_dim=(40)
 #declare -a all_p=(0.1 0.2 0.5 0.7 0.9)
 declare -a all_p=(0.5)
 
-declare -a OODRewards=(1 0)
+#declare -a OODRewards=(1 0)
+declare -a OODRewards=(0)
 
 
 declare -a all_rounds=(1)

@@ -93,8 +93,8 @@ if args.Data=="MNIST":
 	transform = transforms.Compose([transforms.ToTensor(), \
 									transforms.Normalize((0), (1))])
 
-	trainset = datasets.MNIST(root='data/', train=True, download=True, transform=transform)
-	testset = datasets.MNIST(root='data/', train=False, transform=transform)
+	trainset = datasets.MNIST(root='../../data/', train=True, download=True, transform=transform)
+	testset = datasets.MNIST(root='../../data/', train=False, transform=transform)
 
 	indices = torch.randperm(len(trainset))[:1000]
 	#indices = torch.randperm(len(trainset))
@@ -164,11 +164,11 @@ if args.Data=="CIFAR10":
 	[transforms.ToTensor(),
 	 transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
 
-	trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
+	trainset = torchvision.datasets.CIFAR10(root='../../data', train=True,
 											download=True, transform=transform)
 
 
-	testset = torchvision.datasets.CIFAR10(root='./data', train=False,
+	testset = torchvision.datasets.CIFAR10(root='../../data', train=False,
 										   download=True, transform=transform)
 	
 	indices = torch.randperm(len(trainset))[:1000]
@@ -240,11 +240,11 @@ if args.Data=="SVHN":
 	[transforms.ToTensor(),
 	 transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
 
-	trainset = torchvision.datasets.SVHN(root='./data', split="train",
+	trainset = torchvision.datasets.SVHN(root='../../data', split="train",
 											download=True, transform=transform)
 
 
-	testset = torchvision.datasets.SVHN(root='./data', split="test",
+	testset = torchvision.datasets.SVHN(root='../../data', split="test",
 										   download=True, transform=transform)
 	
 	indices = torch.randperm(len(trainset))[:1000]
@@ -337,6 +337,24 @@ class MLPClassifier:
 			self.model = MLP_SVD(Input_size=image_size[0]*image_size[1]*image_size[2],hidden_size=N_units)
 		elif self.model_type=="MLP_Standout":
 			self.model = MLP_Standout(Input_size=image_size[0]*image_size[1]*image_size[2],hidden_size=N_units,droprates=droprates)
+		
+		######Faster version of GFN
+		elif self.model_type=="MLP_GFFN":#GFFN means faster version of the GFN
+			self.model =MLPClassifierWithMaskGenerator(in_dim=image_size[0]*image_size[1]*image_size[2],
+											            out_dim=10,
+											            hidden=(N_units,N_units),
+											            activation=nn.LeakyReLU,
+											            dropout_rate=droprates,
+											            mg_type='gfn',
+											            lr=1e-3,
+											            z_lr=1e-1,
+											            mg_lr=1e-3,
+											            mg_hidden=None,
+											            mg_activation=nn.LeakyReLU,
+											            beta=1,
+											            device=device,)
+
+
 		###CNN
 
 		elif self.model_type=="CNN_nodropout":
@@ -469,16 +487,24 @@ class MLPClassifier:
 
 								augmented_ouputs.append(augmented_output.detach().clone())
 						
-
+				elif self.model_type=="MLP_GFFN":
+					bsz,n_channels,H,W=inputs.shape
+					####this step already update GFN parameters
+					outputs,metric = self.model.step(x=inputs.reshape((bsz, -1)), y=labels , x_valid=None, y_valid=None)
 
 				else:
 					outputs = self.model(inputs)
 
-				loss = self.criterion(outputs, labels)
-				loss.backward()
-				self.optimizer.step()
-				running_loss += loss.item()
+				if "GFFN" not in self.model_type:
+					loss = self.criterion(outputs, labels)
+					loss.backward()
+					self.optimizer.step()
+					running_loss += loss.item()
 
+				else:
+					loss=metric['loss']
+					running_loss += loss
+				
 				#####update GFN
 
 				if "GFN" in self.model_type:
@@ -600,6 +626,22 @@ class MLPClassifier:
 				outputs=torch.cat(outputs,0)
 				
 				outputs=outputs.mean(0)
+
+			elif "GFFN" in self.model_type:
+				N_repeats=11
+				outputs=[]
+				for j in range(N_repeats):#repeat N times and sample the distribution
+				
+					bsz,n_channels,H,W=x.shape
+					####this step already update GFN parameters
+					outputs_vec=self.model(Variable(x).reshape((bsz, -1)))
+					outputs.append(outputs_vec.unsqueeze(0))
+				outputs=torch.cat(outputs,0)
+				
+				outputs=outputs.mean(0)
+
+
+
 			else:
 			  outputs = model(Variable(x))
 
