@@ -62,6 +62,9 @@ parser.add_argument('--OODReward', type=int, default=1,
 					help='if use OOD rewards,1 yes 0 no')
 
 
+parser.add_argument('--DataRatio', type=float, default=1.0,
+					help='ratio of data used for the training (0-1), for small data regime experiments')
+
 parser.add_argument('--beta', type=float, default=1.0,
 					help='how sharp the reward for GFN is')
 
@@ -73,7 +76,7 @@ if torch.cuda.is_available():
 	torch.cuda.manual_seed(args.seed)
 
 
-Task_name=args.Method+"_"+args.Data+"_"+str(args.Hidden_dim)+"_"+str(args.p)+"_"+str(args.beta)+"_"+str(args.OODReward)+"_"+str(args.seed)
+Task_name=args.Method+"_"+args.Data+"_"+str(args.Hidden_dim)+"_"+str(args.p)+"_"+str(args.beta)+"_"+str(args.OODReward)+"_"+str(args.DataRatio)+"_"+str(args.seed)
 
 print("task:",Task_name)
 
@@ -96,7 +99,7 @@ if args.Data=="MNIST":
 	trainset = datasets.MNIST(root='../../data/', train=True, download=True, transform=transform)
 	testset = datasets.MNIST(root='../../data/', train=False, transform=transform)
 
-	indices = torch.randperm(len(trainset))[:1000]
+	indices = torch.randperm(len(trainset))[:int(len(trainset)*args.DataRatio)]
 	#indices = torch.randperm(len(trainset))
 
 	trainset =torch.utils.data.Subset(trainset, indices)
@@ -171,8 +174,10 @@ if args.Data=="CIFAR10":
 	testset = torchvision.datasets.CIFAR10(root='../../data', train=False,
 										   download=True, transform=transform)
 	
-	indices = torch.randperm(len(trainset))[:1000]
+	#indices = torch.randperm(len(trainset))[:1000]
 	#indices = torch.randperm(len(trainset))
+	indices = torch.randperm(len(trainset))[:int(len(trainset)*args.DataRatio)]
+
 
 	trainset =torch.utils.data.Subset(trainset, indices)
 
@@ -247,13 +252,14 @@ if args.Data=="SVHN":
 	testset = torchvision.datasets.SVHN(root='../../data', split="test",
 										   download=True, transform=transform)
 	
-	indices = torch.randperm(len(trainset))[:1000]
+	#indices = torch.randperm(len(trainset))[:1000]
 	#indices = torch.randperm(len(trainset))
+	indices = torch.randperm(len(trainset))[:int(len(trainset)*args.DataRatio)]
 
 	trainset =torch.utils.data.Subset(trainset, indices)
 
-	indices = torch.randperm(len(testset))[:10000]
-	#indices = torch.randperm(len(testset))
+	#indices = torch.randperm(len(testset))[:10000]
+	indices = torch.randperm(len(testset))
 
 	testset  =torch.utils.data.Subset(testset, indices)
 	
@@ -325,8 +331,9 @@ class MLPClassifier:
 		self.model_type=model_type
 
 		if self.model_type=="MLP_nodropout":
-		  self.model = MLP(Input_size=image_size[0]*image_size[1]*image_size[2], hidden_size=N_units,droprates=0)
-		
+		  #self.model = MLP(Input_size=image_size[0]*image_size[1]*image_size[2], hidden_size=N_units,droprates=0)
+		  self.model = MLP_Alldrop(Input_size=image_size[0]*image_size[1]*image_size[2], hidden_size=N_units,droprates=0)
+
 		elif self.model_type=="MLP_dropout":
 		  self.model = MLP(Input_size=image_size[0]*image_size[1]*image_size[2], hidden_size=N_units,droprates=droprates)
 
@@ -342,7 +349,7 @@ class MLPClassifier:
 		elif self.model_type=="MLP_GFFN":#GFFN means faster version of the GFN
 			self.model =MLPClassifierWithMaskGenerator(in_dim=image_size[0]*image_size[1]*image_size[2],
 											            out_dim=10,
-											            hidden=(N_units,N_units),
+											            hidden=(N_units,N_units,N_units,N_units),
 											            activation=nn.LeakyReLU,
 											            dropout_rate=droprates,
 											            mg_type='gfn',
@@ -353,6 +360,19 @@ class MLPClassifier:
 											            mg_activation=nn.LeakyReLU,
 											            beta=1,
 											            device=device,)
+
+
+		elif self.model_type=="MLP_dropoutAll":
+			#dropour on all layers
+		  self.model = MLP_Alldrop(Input_size=image_size[0]*image_size[1]*image_size[2], hidden_size=N_units,droprates=droprates)
+
+		elif self.model_type=="MLP_SVDAll":
+			self.model = MLP_SVDAll(Input_size=image_size[0]*image_size[1]*image_size[2],hidden_size=N_units)
+		
+		elif self.model_type=="MLP_StandoutAll":
+			self.model = MLP_StandoutAll(Input_size=image_size[0]*image_size[1]*image_size[2],hidden_size=N_units,droprates=droprates)
+		
+
 
 
 		###CNN
@@ -533,6 +553,8 @@ class MLPClassifier:
 				if "GFNDB" in self.model_type:
 					
 					GFN_loss=self.GFN_operation.DB_train(rewards,self.optimizer_GFN)
+				elif "GFFN" in self.model_type:
+					GFN_loss=metric['tb_loss']
 					
 
 			self.loss_.append(running_loss / len(trainloader))
@@ -542,6 +564,8 @@ class MLPClassifier:
   
 			if "GFN" in self.model_type:
 				self.GFN_losses.append(GFN_loss.item())
+			elif "GFFN" in self.model_type:
+				self.GFN_losses.append(GFN_loss)
 			else:
 				self.GFN_losses.append(0)
 

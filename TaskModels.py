@@ -444,12 +444,12 @@ class RandomMaskGenerator(nn.Module):
     def __init__(self, dropout_rate):
         super().__init__()
         self.dropout_rate = torch.tensor(dropout_rate).type(torch.float32)
-
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     def forward(self, x):
         return torch.bernoulli((1. - self.dropout_rate) * torch.ones(x.shape))
 
     def log_prob(self, x, m):
-        dist = (1. - self.dropout_rate) * torch.ones(x.shape)
+        dist = (1. - self.dropout_rate) * torch.ones(x.shape).to(self.device)
         probs = dist * m + (1. - dist) * (1. - m)
         return torch.log(probs).sum(1)
 
@@ -563,9 +563,25 @@ class MLPClassifierWithMaskGenerator(nn.Module):
                 hidden=mg_hidden,
                 activation=mg_activation,
             ).to(device)
-            self.logZ = nn.Parameter(torch.tensor(0.)).to(device)
-            param_list = [{'params': self.model.parameters(), 'lr': mg_lr},
-                          {'params': self.logZ, 'lr': z_lr}]
+            
+            ####total flow (logZ) should condition on input or previous layoutout
+            #self.logZ = nn.Parameter(torch.tensor(0.)).to(device)
+            
+            self.total_flowestimator = MLP_GFFN(in_dim=in_dim,out_dim=1,
+                                    activation=mg_activation).to(device)
+            
+                        
+            #param_list = [{'params': self.model.parameters(), 'lr': mg_lr},
+            #              {'params': self.logZ, 'lr': z_lr}]
+
+            MaskGeneratorParameters=[]
+            for generator in self.mask_generators:
+                MaskGeneratorParameters+=list(generator.parameters())
+           
+            param_list = [{'params': MaskGeneratorParameters, 'lr': mg_lr},
+                         {'params': self.total_flowestimator.parameters(), 'lr': z_lr}]
+            
+
             self.mg_optimizer = optim.Adam(param_list)
         else:
             raise ValueError('unknown mask generator type {}'.format(mg_type))
@@ -600,13 +616,14 @@ class MLPClassifierWithMaskGenerator(nn.Module):
         with torch.no_grad():
             losses = nn.CrossEntropyLoss(reduce=False)(logits, y)
             log_rewards = - self.beta * losses
+            logZ=self.total_flowestimator(x)
         # trajectory balance loss
         log_probs_F = []
         log_probs_B = []
         for m, mg_f, mg_b in zip(masks, self.mask_generators, self.rand_mask_generators):
             log_probs_F.append(mg_f.log_prob(m, m).unsqueeze(1))
             log_probs_B.append(mg_b.log_prob(m, m).unsqueeze(1))
-        tb_loss = ((self.logZ - log_rewards
+        tb_loss = ((logZ - log_rewards
                     + torch.cat(log_probs_F, dim=1).sum(dim=1)
                     - torch.cat(log_probs_B, dim=1).sum(dim=1)) ** 2).mean()
         metric['tb_loss'] = tb_loss.item()
@@ -631,6 +648,108 @@ class MLPClassifierWithMaskGenerator(nn.Module):
 
         return logits
 
+
+########baselines for GFFN 
+
+class MLP_Alldrop(nn.Module):
+    def __init__(self,Input_size, hidden_size=10, droprates=0):
+        super(MLP_Alldrop, self).__init__()
+        ###this version has dropout on on layers
+
+        self.fc1 = nn.Linear(Input_size,hidden_size)
+        self.fc2 = nn.Linear(hidden_size,hidden_size)
+        self.fc3 = nn.Linear(hidden_size,hidden_size)
+        self.output = nn.Linear(hidden_size, 10)
+
+
+        self.DIY_Dropout=DIY_Dropout(droprates)###make it part of the model so it gets the train/eval state
+
+        self.droprates=droprates
+
+    def forward(self, x):
+      
+        x = x.view(x.shape[0], -1)
+        #x=self.DIY_Dropout(x)
+        x=F.relu(self.fc1(x))
+        x=self.DIY_Dropout(x)
+        x=F.relu(self.fc2(x))
+        x=self.DIY_Dropout(x)
+        x=F.relu(self.fc3(x))
+        x=self.DIY_Dropout(x)
+        #x=DIY_Dropout(p=self.droprates[1])(x)
+        x=self.output(x)
+        return x
+
+
+
+
+class MLP_SVDAll(nn.Module):
+    ####SVD on all layers
+    def __init__(self, Input_size,hidden_size=10,threshold=3):
+        super(MLP_SVDAll, self).__init__()
+
+        #self.fc1 = nn.Linear(28*28,hidden_size)
+        self.fc1 = LinearSVDO(Input_size, hidden_size, threshold) 
+        self.fc2 = LinearSVDO(hidden_size, hidden_size, threshold)
+        self.fc3 = LinearSVDO(hidden_size, hidden_size, threshold)
+        self.output = nn.Linear(hidden_size, 10)
+
+    def forward(self, x):
+      
+        x = x.view(x.shape[0], -1)
+        #x=DIY_Dropout(p=self.droprates[0])(x)
+        x=F.relu(self.fc1(x))
+        x=F.relu(self.fc2(x))
+        x=F.relu(self.fc3(x))
+        #x=DIY_Dropout(p=self.droprates[1])(x)
+        x=self.output(x)
+        return x
+
+
+
+
+class MLP_StandoutAll(nn.Module):
+    def __init__(self,Input_size, hidden_size=10,droprates=0.5):
+        super(MLP_StandoutAll, self).__init__()
+
+        self.fc1 = nn.Linear(Input_size,hidden_size)
+   
+        self.fc1_drop = Standout(self.fc1, droprates, 1)     
+        
+        self.fc2 = nn.Linear(hidden_size,hidden_size)
+        
+        self.fc2_drop = Standout(self.fc2, droprates, 1)
+
+        self.fc3 = nn.Linear(hidden_size,hidden_size)
+        
+        self.fc3_drop = Standout(self.fc3, droprates, 1)
+        
+ 
+        
+        self.output = nn.Linear(hidden_size, 10)
+
+    def forward(self, x):
+      
+        x = x.view(x.shape[0], -1)
+        #x=DIY_Dropout(p=self.droprates[0])(x)
+        
+        previous = x        
+        x_relu= F.relu(self.fc1(x))
+        x = self.fc1_drop(previous, x_relu)
+       
+
+        previous = x
+        x_relu = F.relu(self.fc2(x))
+        x = self.fc2_drop(previous, x_relu)
+       
+        previous = x
+        x_relu = F.relu(self.fc3(x))
+        x = self.fc3_drop(previous, x_relu)
+
+              
+        x=self.output(x)
+
+        return x
 
 
 

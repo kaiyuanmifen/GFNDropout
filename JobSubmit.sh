@@ -29,7 +29,9 @@ p=$4
 
 OODReward=$5
 
-seed=$6
+DataRatio=$6
+
+seed=$7
 
 
-python Run_training.py --Data $data --Method $method --Hidden_dim $dim --p $p --seed $seed --Epochs 200 --OODReward ${OODReward}
+python Run_training.py --Data $data --Method $method --Hidden_dim $dim --p $p --seed $seed --DataRatio $DataRatio --Epochs 50 --OODReward ${OODReward}
