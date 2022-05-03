@@ -18,3 +18,4 @@ Methods include
 4) Variational dropout (SVD) 
 5) GFNDB
 6) GFNFM
+7) GFFN is a newly implemented version of GFN that is much fasters and works on many different layers ( augmentation training to be implemented(TODO))
