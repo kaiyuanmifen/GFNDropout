@@ -439,6 +439,18 @@ class MLPMaskedDropout(nn.Module):
         x = self.out_layer(x)
         return x, masks
 
+    def forward_predifinedMask(self, x, mask):
+        ###forward using predefined mask
+        masks = []
+        for layer, m in zip(self.fc, mask):
+            x = self.activation()(layer(x))
+            
+            masks.append(m)
+            multipliers = m.shape[1] / (m.sum(1) + 1e-6)
+            x = torch.mul((x * m).T, multipliers).T
+        x = self.out_layer(x)
+        return x, masks
+
 
 class RandomMaskGenerator(nn.Module):
     def __init__(self, dropout_rate):
@@ -589,7 +601,7 @@ class MLPClassifierWithMaskGenerator(nn.Module):
         # gfn parameters
         self.beta = beta
 
-    def step(self, x, y, x_valid=None, y_valid=None):
+    def step(self, x, y):
         metric = {}
         logits, masks = self.model(x, self.mask_generators)
         # Update model
@@ -601,22 +613,31 @@ class MLPClassifierWithMaskGenerator(nn.Module):
         loss.backward()
         self.optimizer.step()
 
-        # Update mask generators
-        if self.mg_type == 'gfn':
-            if x_valid is not None and y_valid is not None:
-                metric.update(self._gfn_step(x_valid, y_valid))
-            else:
-                metric.update(self._gfn_step(x, y))
+        # # Update mask generators
+        # if self.mg_type == 'gfn':
+        #     if x_valid is not None and y_valid is not None:
+        #         #update using validation set
+        #         metric.update(self._gfn_step(x_valid, y_valid,x_valid, y_valid))
+        #     else:
+        #         metric.update(self._gfn_step(x, y,x,y))
 
         return logits,metric
 
-    def _gfn_step(self, x, y):
+    def _gfn_step(self, x_mask, y_mask,x_reward,y_reward):
+        #####this step allows us to use different x,y to generate mask and calcualte reward(loss)
+
         metric = {}
-        logits, masks = self.model(x, self.mask_generators)
+        #generate mask
+        _, masks = self.model(x_mask, self.mask_generators)
+
+        ###for loss
+        logits, _ = self.model.forward_predifinedMask(x_reward, masks)
+                
+
         with torch.no_grad():
-            losses = nn.CrossEntropyLoss(reduce=False)(logits, y)
+            losses = nn.CrossEntropyLoss(reduce=False)(logits, y_reward)
             log_rewards = - self.beta * losses
-            logZ=self.total_flowestimator(x)
+            logZ=self.total_flowestimator(x_mask)#this flow is calculated using x_mask, not a bug , to encourage generalization 
         # trajectory balance loss
         log_probs_F = []
         log_probs_B = []

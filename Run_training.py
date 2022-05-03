@@ -58,8 +58,8 @@ parser.add_argument('--Method', type=str, default='Original',
 parser.add_argument('--Epochs', type=int, default=200,
 					help='Number of epochs')
 
-parser.add_argument('--OODReward', type=int, default=1,
-					help='if use OOD rewards,1 yes 0 no')
+parser.add_argument('--RewardType', type=int, default=0,
+					help='0:only training set, 1:validation set , 2: validation set +augmentation')
 
 
 parser.add_argument('--DataRatio', type=float, default=1.0,
@@ -76,7 +76,7 @@ if torch.cuda.is_available():
 	torch.cuda.manual_seed(args.seed)
 
 
-Task_name=args.Method+"_"+args.Data+"_"+str(args.Hidden_dim)+"_"+str(args.p)+"_"+str(args.beta)+"_"+str(args.OODReward)+"_"+str(args.DataRatio)+"_"+str(args.seed)
+Task_name=args.Method+"_"+args.Data+"_"+str(args.Hidden_dim)+"_"+str(args.p)+"_"+str(args.beta)+"_"+str(args.RewardType)+"_"+str(args.DataRatio)+"_"+str(args.seed)
 
 print("task:",Task_name)
 
@@ -102,7 +102,9 @@ if args.Data=="MNIST":
 	indices = torch.randperm(len(trainset))[:int(len(trainset)*args.DataRatio)]
 	#indices = torch.randperm(len(trainset))
 
-	trainset =torch.utils.data.Subset(trainset, indices)
+	validset =torch.utils.data.Subset(trainset, indices[int(0.7*len(indices)):(int(1*len(indices))-1)])
+	
+	trainset =torch.utils.data.Subset(trainset, indices[:int(0.7*len(indices))])
 
 	#indices = torch.randperm(len(testset))[:300]
 	indices = torch.randperm(len(testset))
@@ -112,11 +114,22 @@ if args.Data=="MNIST":
 	print("training set length")
 	print(len(trainset))
 
+	print("validation set length")
+	print(len(validset))
+
+
 	print("test set length")
 	print(len(testset))
 
 	# Visualize 10 image samples in MNIST dataset
 	trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=2)
+
+	validloader = torch.utils.data.DataLoader(validset, batch_size=len(validset), shuffle=False)
+		
+
+	testloader = torch.utils.data.DataLoader(testset, batch_size=len(testset), shuffle=False)
+	
+
 	dataiter = iter(trainloader)
 	images, labels = dataiter.next()
 
@@ -127,7 +140,7 @@ if args.Data=="MNIST":
 	iml = images[0].numpy().shape[1]
 	[ax[i].imshow(np.transpose(images[i].numpy(),(1,2,0)).reshape(iml,-1),cmap='Greys') for i in range(10)]
 	[ax[i].set_axis_off() for i in range(10)]
-	plt.savefig('MNISTData.png')
+	plt.savefig('images/MNISTData.png')
 
 	print('label:',labels[:10].numpy())
 	print('image data shape:',images[0].numpy().shape)
@@ -154,7 +167,7 @@ if args.Data=="MNIST":
 		iml = Augmented_imgs[0].numpy().shape[1]
 		[ax[i].imshow(np.transpose(Augmented_imgs[i].numpy(),(1,2,0)).reshape(iml,-1),cmap='Greys') for i in range(10)]
 		[ax[i].set_axis_off() for i in range(10)]
-		plt.savefig('AugmentedMNIST_'+str(idx)+'.png')
+		plt.savefig('images/AugmentedMNIST_'+str(idx)+'.png')
 
 
 	# imgs = [
@@ -177,23 +190,34 @@ if args.Data=="CIFAR10":
 	#indices = torch.randperm(len(trainset))[:1000]
 	#indices = torch.randperm(len(trainset))
 	indices = torch.randperm(len(trainset))[:int(len(trainset)*args.DataRatio)]
+	#indices = torch.randperm(len(trainset))
 
-
-	trainset =torch.utils.data.Subset(trainset, indices)
-
+	validset =torch.utils.data.Subset(trainset, indices[int(0.7*len(indices)):(int(1*len(indices))-1)])
+	
+	trainset =torch.utils.data.Subset(trainset, indices[:int(0.7*len(indices))])
 	#indices = torch.randperm(len(testset))[:300]
 	indices = torch.randperm(len(testset))
 
 	testset  =torch.utils.data.Subset(testset, indices)
 	
 	trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
-											  shuffle=True, num_workers=2)
+											  shuffle=True)
+
+
+	validloader = torch.utils.data.DataLoader(validset, batch_size=len(validset), shuffle=False)
+		
+
 
 	testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
 											 shuffle=False, num_workers=2)
 
+
 	print("training set length")
 	print(len(trainset))
+
+	print("validation set length")
+	print(len(validset))
+
 
 	print("test set length")
 	print(len(testset))
@@ -205,7 +229,7 @@ if args.Data=="CIFAR10":
 		img = img / 2 + 0.5     # unnormalize
 		npimg = img.numpy()
 		plt.imshow(np.transpose(npimg, (1, 2, 0)))
-		plt.savefig('DataExamplesCIFAR.png')
+		plt.savefig('images/DataExamplesCIFAR.png')
 
 	####show some examples
 	dataiter = iter(trainloader)
@@ -237,7 +261,7 @@ if args.Data=="CIFAR10":
 		img = img / 2 + 0.5     # unnormalize
 		npimg = img.numpy()
 		plt.imshow(np.transpose(npimg, (1, 2, 0)))
-		plt.savefig('AugmentedCIFAR_'+str(idx)+'.png')
+		plt.savefig('images/AugmentedCIFAR_'+str(idx)+'.png')
 
 if args.Data=="SVHN":
 
@@ -252,13 +276,13 @@ if args.Data=="SVHN":
 	testset = torchvision.datasets.SVHN(root='../../data', split="test",
 										   download=True, transform=transform)
 	
-	#indices = torch.randperm(len(trainset))[:1000]
-	#indices = torch.randperm(len(trainset))
+
 	indices = torch.randperm(len(trainset))[:int(len(trainset)*args.DataRatio)]
 
-	trainset =torch.utils.data.Subset(trainset, indices)
+	validset =torch.utils.data.Subset(trainset, indices[int(0.7*len(indices)):(int(1*len(indices))-1)])
+	
+	trainset =torch.utils.data.Subset(trainset, indices[:int(0.7*len(indices))])
 
-	#indices = torch.randperm(len(testset))[:10000]
 	indices = torch.randperm(len(testset))
 
 	testset  =torch.utils.data.Subset(testset, indices)
@@ -266,15 +290,23 @@ if args.Data=="SVHN":
 	trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
 											  shuffle=True, num_workers=2)
 
+
+	validloader = torch.utils.data.DataLoader(validset, batch_size=len(validset), shuffle=False)
+		
+
+
 	testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
 											 shuffle=False, num_workers=2)
 
 	print("training set length")
 	print(len(trainset))
 
+	print("validation set length")
+	print(len(validset))
+
+
 	print("test set length")
 	print(len(testset))
-
 	# classes = ('plane', 'car', 'bird', 'cat',
 	# 		   'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
 
@@ -282,7 +314,7 @@ if args.Data=="SVHN":
 		img = img / 2 + 0.5     # unnormalize
 		npimg = img.numpy()
 		plt.imshow(np.transpose(npimg, (1, 2, 0)))
-		plt.savefig('DataExamplesSVHN.png')
+		plt.savefig('images/DataExamplesSVHN.png')
 
 	####show some examples
 	dataiter = iter(trainloader)
@@ -314,7 +346,7 @@ if args.Data=="SVHN":
 		img = img / 2 + 0.5     # unnormalize
 		npimg = img.numpy()
 		plt.imshow(np.transpose(npimg, (1, 2, 0)))
-		plt.savefig('AugmentedSVHN_'+str(idx)+'.png')
+		plt.savefig('images/AugmentedSVHN_'+str(idx)+'.png')
 
 
 
@@ -429,20 +461,27 @@ class MLPClassifier:
 		print(total_params)
 
 
-	def fit(self, trainset, testset, verbose=True):
+	def fit(self,verbose=True):
 		# Training, make sure it's on GPU, otherwise, very slow...
-		trainloader = torch.utils.data.DataLoader(trainset, batch_size=self.batch_size, shuffle=True)
-		testloader = torch.utils.data.DataLoader(testset, batch_size=len(testset), shuffle=False)
-		X_test, y_test = iter(testloader).next()
-		X_test = X_test.to(device)
+
+
+		####pick early stop, train mask etc.
+		x_valid, y_valid = iter(validloader).next()
+		x_valid, y_valid = x_valid.to(device),y_valid.to(device)
+
+
+		###Do not use test data to train mask or tune hyperparameter, it is cheating
+		x_test, y_test = iter(testloader).next()
+		x_test = x_test.to(device)
 
 
 		augmented_X_tests=[]
 		####augmenter0,1,2 for GFN training , 3,4,5 for OOD test
 		for idx,augmenter in enumerate(augmenters):
 			if idx<(len(augmenters)//2):
-				augmented_X_tests.append(augmenter(X_test.detach().clone().to(device)))
+				augmented_X_tests.append(augmenter(x_test.detach().clone().to(device)))
 
+		best_valid_acc=0
 		for epoch in range(self.max_epoch):
 			
 			running_loss = 0
@@ -453,8 +492,8 @@ class MLPClassifier:
 				inputs, labels = Variable(inputs_).to(device), Variable(labels_).to(device)
 				self.optimizer.zero_grad()
 
-				####augment images for GFN training
-				if "GFN" in self.model_type and args.OODReward==1:
+				####augment images for GFN training 
+				if "GFN" in self.model_type and args.RewardType==2:
 					augmented_inputs=[]
 					for idx, augmenter in enumerate(augmenters):
 						if idx>=(len(augmenters)//2):
@@ -472,7 +511,7 @@ class MLPClassifier:
 					masks=selected_					
 					outputs = self.model(inputs,masks)#####if using GFN to generate mask for dropout
 					####augmentations
-					if args.OODReward==1:
+					if args.RewardType==2:
 						with torch.no_grad():
 							augmented_ouputs=[]
 							for augmented_input in augmented_inputs:
@@ -497,7 +536,7 @@ class MLPClassifier:
 					outputs = self.model(inputs,masks)#####if using GFN to generate mask for dropout
 					
 					####augmentations
-					if args.OODReward==1:
+					if args.RewardType==2:
 						with torch.no_grad():
 							augmented_ouputs=[]
 				
@@ -507,10 +546,37 @@ class MLPClassifier:
 
 								augmented_ouputs.append(augmented_output.detach().clone())
 						
-				elif self.model_type=="MLP_GFFN":
+				elif "GFFN" in self.model_type:
 					bsz,n_channels,H,W=inputs.shape
-					####this step already update GFN parameters
-					outputs,metric = self.model.step(x=inputs.reshape((bsz, -1)), y=labels , x_valid=None, y_valid=None)
+					####this step update prediction parameters
+					outputs,L_metric = self.model.step(x=inputs.reshape((bsz, -1)), y=labels )
+					##this step update GFN parameters (gradient decent included)
+					x_train=inputs.reshape((bsz, -1))
+					y_train=labels
+
+
+					if args.RewardType==0:
+						G_metric = self.model._gfn_step(x_mask=x_train, y_mask=y_train ,x_reward=x_train, y_reward=y_train)
+					elif args.RewardType==1:
+						
+						G_metric = self.model._gfn_step(x_mask=x_valid.reshape(x_valid.shape[0],-1), y_mask=y_valid ,x_reward=x_valid.reshape(x_valid.shape[0],-1), y_reward=y_valid)
+					elif args.RewardType==2:
+						##build mask using validation set but get reward from different augmentation of the validation set
+						x_valid_augmented=[]
+						x_valid_original=[]
+						y_valid_original=[]
+						for idx, augmenter in enumerate(augmenters):
+							if idx>=(len(augmenters)//2):
+								x_valid_augmented.append(augmenter(x_valid).reshape(x_valid.shape[0],-1).detach().clone().to(device))
+								x_valid_original.append(x_valid.reshape(x_valid.shape[0],-1))
+								y_valid_original.append(y_valid)
+						x_valid_original=torch.cat(x_valid_original,0)
+						x_valid_augmented=torch.cat(x_valid_augmented,0)#augmented x_valid
+						y_valid_original=torch.cat(y_valid_original,0)
+
+						G_metric = self.model._gfn_step(x_mask=x_valid_original, y_mask=y_valid_original ,x_reward=x_valid_augmented, y_reward=y_valid_original)
+						
+										
 
 				else:
 					outputs = self.model(inputs)
@@ -522,7 +588,7 @@ class MLPClassifier:
 					running_loss += loss.item()
 
 				else:
-					loss=metric['loss']
+					loss=L_metric['loss']
 					running_loss += loss
 				
 				#####update GFN
@@ -554,7 +620,7 @@ class MLPClassifier:
 					
 					GFN_loss=self.GFN_operation.DB_train(rewards,self.optimizer_GFN)
 				elif "GFFN" in self.model_type:
-					GFN_loss=metric['tb_loss']
+					GFN_loss=G_metric['tb_loss']
 					
 
 			self.loss_.append(running_loss / len(trainloader))
@@ -569,9 +635,15 @@ class MLPClassifier:
 			else:
 				self.GFN_losses.append(0)
 
-			y_test_pred = self.predict(X_test).cpu()
+			y_test_pred = self.predict(x_test).cpu()
 			self.test_accuracy.append(np.mean((y_test == y_test_pred).numpy()))
 			self.test_error.append(int(len(testset)*(1-self.test_accuracy[-1])))
+
+			###validation acc
+			y_valid_pred = self.predict(x_valid).cpu()
+
+			valid_acc=np.mean((y_valid == y_valid_pred).numpy())
+
 			####OOD loss
 			OOD_accs=[]
 			OOD_testerrors=[]
@@ -599,7 +671,14 @@ class MLPClassifier:
 			df.to_csv("Results/"+Task_name+"_performance.csv")
 
 			if verbose and epoch%1==0:
-				print('Test error: {}; test accuracy: {} ,train loss: {} GFN loss: {}'.format(self.test_error[-1], self.test_accuracy[-1],self.loss_[-1],self.GFN_losses[-1]))
+				print('Test error: {}; test accuracy: {} ,train loss: {} GFN loss: {} Valid_acc: {}'.format(self.test_error[-1], self.test_accuracy[-1],self.loss_[-1],self.GFN_losses[-1],valid_acc))
+			
+			if valid_acc> best_valid_acc:
+				#use validation performance to decide early stopping
+				torch.save(self.model.state_dict(), "checkpoints/"+Task_name+'.pt')
+				best_valid_acc=valid_acc
+
+
 		return self
 	
 	def predict(self, x):
@@ -705,43 +784,45 @@ mlp1 = [MLPClassifier(droprates=args.p,image_size=image_size,max_epoch=args.Epoc
 #         ]
 #       
 # Training, set verbose=True to see loss after each epoch.
-[mlp.fit(trainset, testset,verbose=True) for mlp in mlp1]
+#[mlp.fit(trainset, testset,verbose=True) for mlp in mlp1]
+[mlp.fit(verbose=True) for mlp in mlp1]
 
-# Save torch models
-for ind, mlp in enumerate(mlp1):
-	#torch.save(mlp.model, 'mnist_mlp1_'+str(ind)+'.pth')
-	torch.save(mlp.model, "checkpoints/"+Task_name+'.pth')
-	# Prepare to save errors
-	mlp.test_error = list(map(str, mlp.test_error))
 
-# Save test errors to plot figures
-open("Results/"+Task_name+"test_errors.txt","w").write('\n'.join([','.join(mlp.test_error) for mlp in mlp1])) 
+# # Save torch models
+# for ind, mlp in enumerate(mlp1):
+# 	#torch.save(mlp.model, 'mnist_mlp1_'+str(ind)+'.pth')
+# 	torch.save(mlp.model, "checkpoints/"+Task_name+'.pth')
+# 	# Prepare to save errors
+# 	mlp.test_error = list(map(str, mlp.test_error))
+
+# # Save test errors to plot figures
+# open("Results/"+Task_name+"test_errors.txt","w").write('\n'.join([','.join(mlp.test_error) for mlp in mlp1])) 
 
 
 # Load saved models to CPU
 #mlp1_models = [torch.load('mnist_mlp1_'+str(ind)+'.pth',map_location={'cuda:0': 'cpu'}) for ind in [0,1,2]]
 
 # Load saved test errors to plot figures.
-mlp1_test_errors = [error_array.split(',') for error_array in open("Results/"+Task_name+"test_errors.txt","r").read().split('\n')]
-mlp1_test_errors = np.array(mlp1_test_errors,dtype='f')
+# mlp1_test_errors = [error_array.split(',') for error_array in open("Results/"+Task_name+"test_errors.txt","r").read().split('\n')]
+# mlp1_test_errors = np.array(mlp1_test_errors,dtype='f')
 
 
 
 
-#####visualization 
+# #####visualization 
 
 
-labels = [args.Method] 
-#          'MLP 50% dropout in hidden layers',
- #         'MLP 50% dropout in hidden layers+20% input layer']
+# labels = [args.Method] 
+# #          'MLP 50% dropout in hidden layers',
+#  #         'MLP 50% dropout in hidden layers+20% input layer']
 
-plt.figure(figsize=(8, 7))
-for i, r in enumerate(mlp1_test_errors):
-	plt.plot(range(1, len(r)+1), r, '.-', label=labels[i], alpha=0.6);
-#plt.ylim([50, 250]);
-plt.legend(loc=1);
-plt.xlabel('Epochs');
-plt.ylabel('Number of errors in test set');
-plt.title('Test error on MNIST dataset for Multilayer Perceptron')
-plt.savefig('Results/'+Task_name+'PerformanceVsepisodes.png')
-plt.clf()
+# plt.figure(figsize=(8, 7))
+# for i, r in enumerate(mlp1_test_errors):
+# 	plt.plot(range(1, len(r)+1), r, '.-', label=labels[i], alpha=0.6);
+# #plt.ylim([50, 250]);
+# plt.legend(loc=1);
+# plt.xlabel('Epochs');
+# plt.ylabel('Number of errors in test set');
+# plt.title('Test error on MNIST dataset for Multilayer Perceptron')
+# plt.savefig('Results/'+Task_name+'PerformanceVsepisodes.png')
+# plt.clf()

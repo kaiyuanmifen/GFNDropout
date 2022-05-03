@@ -27,11 +27,11 @@ dim=$3
 
 p=$4
 
-OODReward=$5
+RewardType=$5
 
 DataRatio=$6
 
 seed=$7
 
 
-python Run_training.py --Data $data --Method $method --Hidden_dim $dim --p $p --seed $seed --DataRatio $DataRatio --Epochs 50 --OODReward ${OODReward}
+python Run_training.py --Data $data --Method $method --Hidden_dim $dim --p $p --seed $seed --DataRatio $DataRatio --Epochs 50 --RewardType ${RewardType}
