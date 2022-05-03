@@ -92,7 +92,7 @@ if args.Data=="MNIST":
 	trainset = datasets.MNIST(root='data/', train=True, download=True, transform=transform)
 	testset = datasets.MNIST(root='data/', train=False, transform=transform)
 
-	indices = torch.randperm(len(trainset))[:1000]
+	indices = torch.randperm(len(trainset))
 	#indices = torch.randperm(len(trainset))
 
 	trainset =torch.utils.data.Subset(trainset, indices)
@@ -167,7 +167,7 @@ if args.Data=="CIFAR10":
 	testset = torchvision.datasets.CIFAR10(root='./data', train=False,
 										   download=True, transform=transform)
 	
-	indices = torch.randperm(len(trainset))[:1000]
+	indices = torch.randperm(len(trainset))
 	#indices = torch.randperm(len(trainset))
 
 	trainset =torch.utils.data.Subset(trainset, indices)
@@ -243,7 +243,7 @@ if args.Data=="SVHN":
 	testset = torchvision.datasets.SVHN(root='./data', split="test",
 										   download=True, transform=transform)
 	
-	indices = torch.randperm(len(trainset))[:1000]
+	indices = torch.randperm(len(trainset))
 	#indices = torch.randperm(len(trainset))
 
 	trainset =torch.utils.data.Subset(trainset, indices)
@@ -321,7 +321,7 @@ class MLPClassifier:
 		self.model_type=model_type
 
 		self.num_channels = image_size[0]
-		self.num_resnet_layers = 18
+		self.num_resnet_layers = 101
 		if self.model_type=="MLP_nodropout":
 		  self.model = MLP(Input_size=image_size[0]*image_size[1]*image_size[2], hidden_size=N_units,droprates=0)
 		
@@ -364,6 +364,23 @@ class MLPClassifier:
 		elif self.model_type=="RESNET_SVD":
 			self.model = ResNet_SVD(num_layers = self.num_resnet_layers, img_channels = self.num_channels,hidden_size=N_units,droprates=droprates)
 
+		######Faster version of GFN
+		elif self.model_type=="RESNET_GFFN":#GFFN means faster version of the GFN
+			self.model =RESNETClassifierWithMaskGenerator(num_layers = self.num_resnet_layers,
+														img_channels = self.num_channels,
+														out_dim=10,
+											            hidden=(N_units,N_units,N_units,N_units),
+											            activation=nn.LeakyReLU,
+											            dropout_rate=droprates,
+											            mg_type='gfn',
+											            lr=1e-3,
+											            z_lr=1e-1,
+											            mg_lr=1e-3,
+											            mg_hidden=None,
+											            mg_activation=nn.LeakyReLU,
+											            beta=1,
+											            device=device,)
+  
 		else:
 			raise Exception(f"Could not recognize model type `{self.model_type}` specified.")  	
 

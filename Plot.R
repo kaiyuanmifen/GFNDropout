@@ -51,7 +51,7 @@ head(Data)
 
 for (Model in c("RESNET")){
   for (DataNames in c("SVHN", "CIFAR10","MNIST")){
-    for (N_units in c(40)){
+    for (N_units in c(80)){
       for (p in c(0.5)){
         for (OODReward in c(1,0)){
 

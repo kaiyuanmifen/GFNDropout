@@ -388,6 +388,388 @@ class CNN_SVD(nn.Module):
         return x
 
 
+
+#------------------------------------RESNET GFN-----------------------------------------------------------------
+class RESNET_GFFN(nn.Module):
+   
+    def __init__(self,num_layers,img_channels=3,out_dim=10,hidden=None,activation=nn.LeakyReLU):
+        super(RESNET_GFFN, self).__init__()
+        assert num_layers in [18, 34, 50, 101, 152], "ResNet: Unknown architecture! Number of layers has to be 18, 34, 50, 101, or 152 "
+
+        if hidden is None:
+            hidden = [32,32]
+        block = Block
+        if num_layers < 50:
+            self.expansion = 1
+        else:
+            self.expansion = 4
+        if num_layers == 18:
+            layers = [2, 2, 2, 2]
+        elif num_layers == 34 or num_layers == 50:
+            layers = [3, 4, 6, 3]
+        elif num_layers == 101:
+            layers = [3, 4, 23, 3]
+        else:
+            layers = [3, 8, 36, 3]
+        self.in_channels = 64
+        self.conv1 = nn.Conv2d(img_channels, 64, kernel_size=7, stride=2, padding=3)
+        self.bn1 = nn.BatchNorm2d(64)
+        self.relu = nn.ReLU()
+        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+
+        # ResNetLayers
+        self.layer1 = self.make_layers(num_layers, block, layers[0], intermediate_channels=64, stride=1)
+        self.layer2 = self.make_layers(num_layers, block, layers[1], intermediate_channels=128, stride=2)
+        self.layer3 = self.make_layers(num_layers, block, layers[2], intermediate_channels=256, stride=2)
+        self.layer4 = self.make_layers(num_layers, block, layers[3], intermediate_channels=512, stride=2)
+
+        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
+        self.CNNoutputsize = 512 * self.expansion
+     
+        h_old =self.CNNoutputsize
+        self.fc = nn.ModuleList()
+        for h in hidden:
+            self.fc.append(nn.Linear(h_old,h))
+            h_old = h 
+        
+        self.out_layer = nn.Linear(h_old, out_dim)
+        self.activation = activation
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.maxpool(x)
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.layer4(x)
+        x = self.avgpool(x)
+        x = x.reshape(x.shape[0], -1)
+        for layer in self.fc:
+            x = self.activation()(layer(x))
+       
+        x= self.out_layer(x)
+        return x
+
+    def make_layers(self, num_layers, block, num_residual_blocks, intermediate_channels, stride):
+        layers = []
+
+        identity_downsample = nn.Sequential(nn.Conv2d(self.in_channels, intermediate_channels*self.expansion, kernel_size=1, stride=stride),
+                                            nn.BatchNorm2d(intermediate_channels*self.expansion))
+        layers.append(block(num_layers, self.in_channels, intermediate_channels, identity_downsample, stride))
+        self.in_channels = intermediate_channels * self.expansion # 256
+        for i in range(num_residual_blocks - 1):
+            layers.append(block(num_layers, self.in_channels, intermediate_channels)) # 256 -> 64, 64*4 (256) again
+        return nn.Sequential(*layers)
+
+
+
+class ResNet_MaskedDropout_GFFN(nn.Module):
+   
+    def __init__(self,num_layers,img_channels=3,out_dim=10,hidden=None,activation=nn.LeakyReLU):
+        super(ResNet_MaskedDropout_GFFN, self).__init__()
+        assert num_layers in [18, 34, 50, 101, 152], "ResNet: Unknown architecture! Number of layers has to be 18, 34, 50, 101, or 152 "
+
+        if hidden is None:
+            hidden = [32,32]
+        block = Block
+        if num_layers < 50:
+            self.expansion = 1
+        else:
+            self.expansion = 4
+        if num_layers == 18:
+            layers = [2, 2, 2, 2]
+        elif num_layers == 34 or num_layers == 50:
+            layers = [3, 4, 6, 3]
+        elif num_layers == 101:
+            layers = [3, 4, 23, 3]
+        else:
+            layers = [3, 8, 36, 3]
+        self.in_channels = 64
+        self.conv1 = nn.Conv2d(img_channels, 64, kernel_size=7, stride=2, padding=3)
+        self.bn1 = nn.BatchNorm2d(64)
+        self.relu = nn.ReLU()
+        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+
+        # ResNetLayers
+        self.layer1 = self.make_layers(num_layers, block, layers[0], intermediate_channels=64, stride=1)
+        self.layer2 = self.make_layers(num_layers, block, layers[1], intermediate_channels=128, stride=2)
+        self.layer3 = self.make_layers(num_layers, block, layers[2], intermediate_channels=256, stride=2)
+        self.layer4 = self.make_layers(num_layers, block, layers[3], intermediate_channels=512, stride=2)
+
+        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
+        self.CNNoutputsize = 512 * self.expansion
+     
+        h_old =self.CNNoutputsize
+        self.fc = nn.ModuleList()
+        for h in hidden:
+            self.fc.append(nn.Linear(h_old,h))
+            h_old = h 
+        
+        self.out_layer = nn.Linear(h_old, out_dim)
+        self.activation = activation
+
+    def forward(self, x,mask_generators):
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.maxpool(x)
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.layer4(x)
+        x = self.avgpool(x)
+        x = x.reshape(x.shape[0], -1)
+        
+        masks = []
+        for layer, mg in zip(self.fc, mask_generators):
+            x = self.activation()(layer(x))
+            # generate mask & dropout
+            m = mg(x).detach()
+            masks.append(m)
+            multipliers = m.shape[1] / (m.sum(1) + 1e-6)
+            x = torch.mul((x * m).T, multipliers).T
+        x = self.out_layer(x)
+        return x, masks
+
+    def make_layers(self, num_layers, block, num_residual_blocks, intermediate_channels, stride):
+        layers = []
+
+        identity_downsample = nn.Sequential(nn.Conv2d(self.in_channels, intermediate_channels*self.expansion, kernel_size=1, stride=stride),
+                                            nn.BatchNorm2d(intermediate_channels*self.expansion))
+        layers.append(block(num_layers, self.in_channels, intermediate_channels, identity_downsample, stride))
+        self.in_channels = intermediate_channels * self.expansion # 256
+        for i in range(num_residual_blocks - 1):
+            layers.append(block(num_layers, self.in_channels, intermediate_channels)) # 256 -> 64, 64*4 (256) again
+        return nn.Sequential(*layers)
+
+
+class RandomMaskGenerator(nn.Module):
+    def __init__(self, dropout_rate):
+        super().__init__()
+        self.dropout_rate = torch.tensor(dropout_rate).type(torch.float32)
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    def forward(self, x):
+        return torch.bernoulli((1. - self.dropout_rate) * torch.ones(x.shape))
+
+    def log_prob(self, x, m):
+        dist = (1. - self.dropout_rate) * torch.ones(x.shape).to(self.device)
+        probs = dist * m + (1. - dist) * (1. - m)
+        return torch.log(probs).sum(1)
+
+
+class RESNETMaskGenerator(nn.Module):
+    def __init__(self, num_layers,img_channels,num_unit, dropout_rate, hidden=None, activation=nn.LeakyReLU):
+        super().__init__()
+        self.num_unit = torch.tensor(num_unit).type(torch.float32)
+        self.dropout_rate = torch.tensor(dropout_rate).type(torch.float32)
+        self.mlp = RESNET_GFFN(
+            num_layers = num_layers,
+            img_channels = img_channels,           
+            out_dim=num_unit,
+            hidden=hidden,
+            activation=activation,
+        )
+      
+    def _dist(self, x):
+        x = self.mlp(x)
+        x = torch.sigmoid(x)
+        dist = (1. - self.dropout_rate) * self.num_unit * x / (x.sum(1).unsqueeze(1) + 1e-6)
+        dist = dist.clamp(0, 1)
+        return dist
+
+    def forward(self, x):
+        return torch.bernoulli(self._dist(x))
+
+    def log_prob(self, x, m):
+        dist = self._dist(x)
+        probs = dist * m + (1. - dist) * (1. - m)
+        return torch.log(probs).sum(1)
+
+
+def construct_random_mask_generators(
+        model,
+        dropout_rate,
+):
+    mask_generators = nn.ModuleList()
+    for layer in model.fc:
+        mask_generators.append(
+            RandomMaskGenerator(
+                dropout_rate=dropout_rate,
+            )
+        )
+
+    return mask_generators
+
+def construct_resnet_mask_generators(
+        model,
+        num_layers,
+        img_channels,
+        dropout_rate,
+        hidden=None,
+        activation=nn.LeakyReLU
+):
+    mask_generators = nn.ModuleList()
+    for layer in model.fc:
+        mask_generators.append(
+            RESNETMaskGenerator(
+                num_layers = num_layers,
+                img_channels = img_channels,
+                num_unit=layer.weight.shape[0],
+                dropout_rate=dropout_rate,
+                hidden=hidden,
+                activation=activation
+            )
+          
+        )
+
+    return mask_generators
+
+
+
+
+class RESNETClassifierWithMaskGenerator(nn.Module):
+    def __init__(
+            self,
+            num_layers,
+            img_channels=3,           
+            out_dim=10,
+            hidden=None,
+            activation=nn.LeakyReLU,
+            dropout_rate=0.5,
+            mg_type='random',
+            lr=1e-3,
+            z_lr=1e-1,
+            mg_lr=1e-3,
+            mg_hidden=None,
+            mg_activation=nn.LeakyReLU,
+            beta=0.1,
+            device='cpu',
+    ):
+        super().__init__()
+        # classifier
+        self.model = ResNet_MaskedDropout_GFFN(
+            num_layers = num_layers,
+            img_channels = img_channels,
+            out_dim=out_dim,
+            hidden=hidden,
+            activation=activation
+        ).to(device)
+        
+        self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
+
+        # mask generators
+        self.mg_type = mg_type
+        if mg_type == 'random':
+            self.mask_generators = construct_random_mask_generators(
+                model=self.model,
+                dropout_rate=dropout_rate
+            ).to(device)
+        elif mg_type == 'gfn':
+            # for backward log prob calculation only
+            self.rand_mask_generators = construct_random_mask_generators(
+                model=self.model,
+                dropout_rate=dropout_rate
+            ).to(device)
+            self.mask_generators = construct_resnet_mask_generators(
+                model=self.model,
+                num_layers = num_layers,
+                img_channels = img_channels,
+                dropout_rate=dropout_rate,
+                hidden=mg_hidden,
+                activation=mg_activation,
+            ).to(device)
+                    
+            ####total flow (logZ) should condition on input or previous layoutout
+            #self.logZ = nn.Parameter(torch.tensor(0.)).to(device)
+            
+            self.total_flowestimator = RESNET_GFFN(
+                                    num_layers = num_layers,
+                                    img_channels = img_channels,
+                                    out_dim=1,
+                                    activation=mg_activation).to(device)
+                        
+            #param_list = [{'params': self.model.parameters(), 'lr': mg_lr},
+            #              {'params': self.logZ, 'lr': z_lr}]
+
+            MaskGeneratorParameters=[]
+            for generator in self.mask_generators:
+                MaskGeneratorParameters+=list(generator.parameters())
+           
+            param_list = [{'params': MaskGeneratorParameters, 'lr': mg_lr},
+                         {'params': self.total_flowestimator.parameters(), 'lr': z_lr}]
+            
+
+            self.mg_optimizer = optim.Adam(param_list)
+        else:
+            raise ValueError('unknown mask generator type {}'.format(mg_type))
+
+        # gfn parameters
+        self.beta = beta
+
+    def step(self, x, y, x_valid=None, y_valid=None):
+        metric = {}
+        logits, masks = self.model(x, self.mask_generators)
+        # Update model
+        self.optimizer.zero_grad()
+        loss = nn.CrossEntropyLoss()(logits, y)
+        acc = (torch.argmax(logits, dim=1) == y).sum().item() / len(y)
+        metric['loss'] = loss.item()
+        metric['acc'] = acc
+        loss.backward()
+        self.optimizer.step()
+
+        # Update mask generators
+        if self.mg_type == 'gfn':
+            if x_valid is not None and y_valid is not None:
+                metric.update(self._gfn_step(x_valid, y_valid))
+            else:
+                metric.update(self._gfn_step(x, y))
+
+        return logits,metric
+
+    def _gfn_step(self, x, y):
+        metric = {}
+        logits, masks = self.model(x, self.mask_generators)
+        with torch.no_grad():
+            losses = nn.CrossEntropyLoss(reduce=False)(logits, y)
+            log_rewards = - self.beta * losses
+            logZ=self.total_flowestimator(x)
+        # trajectory balance loss
+        log_probs_F = []
+        log_probs_B = []
+        for m, mg_f, mg_b in zip(masks, self.mask_generators, self.rand_mask_generators):
+            log_probs_F.append(mg_f.log_prob(m, m).unsqueeze(1))
+            log_probs_B.append(mg_b.log_prob(m, m).unsqueeze(1))
+        tb_loss = ((logZ - log_rewards
+                    + torch.cat(log_probs_F, dim=1).sum(dim=1)
+                    - torch.cat(log_probs_B, dim=1).sum(dim=1)) ** 2).mean()
+        metric['tb_loss'] = tb_loss.item()
+        self.mg_optimizer.zero_grad()
+        tb_loss.backward()
+        self.mg_optimizer.step()
+
+        return metric
+
+    def test(self, x, y):
+        metric = {}
+        logits, masks = self.model(x, self.mask_generators)
+        loss = nn.CrossEntropyLoss()(logits, y)
+        acc = (torch.argmax(logits, dim=1) == y).sum().item() / len(y)
+        metric['loss'] = loss.item()
+        metric['acc'] = acc
+
+        return metric
+
+    def forward(self,x):
+        logits, masks = self.model(x, self.mask_generators)
+
+        return logits
+
+#------------------------------------RESNET GFFN-----------------------------------------------------------------
+
+
 # ResNet with SVD, Like CNN_SVD()
 class ResNet_SVD(nn.Module):
    
@@ -587,7 +969,7 @@ class ResNet_MaskedDropout(nn.Module):
 
         x = self.avgpool(x)
         x = x.reshape(x.shape[0], -1)
-        x = self.fc1(x)
+        x = F.relu(self.fc1(x))
         x=self.Mask_Dropout(x,mask)
         x= self.fc2(x)
         return x
@@ -605,7 +987,7 @@ class ResNet_MaskedDropout(nn.Module):
 
         x = self.avgpool(x)
         x = x.reshape(x.shape[0], -1)
-        x = self.fc1(x)
+        x = F.relu(self.fc1(x))
         
         return x    
 
@@ -675,7 +1057,7 @@ class ResNet(nn.Module):
         x = self.avgpool(x)
         x = x.reshape(x.shape[0], -1)
        
-        x = self.fc1(x)
+        x = F.relu(self.fc1(x))
         x= self.DIY_Dropout(x)
         x= self.fc2(x)
         return x
