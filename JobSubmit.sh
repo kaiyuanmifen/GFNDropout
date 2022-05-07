@@ -2,7 +2,7 @@
 #SBATCH --job-name=dropout_train
 #SBATCH --gres=gpu:1             # Number of GPUs (per node)
 #SBATCH --mem=65G               # memory (per node)
-#SBATCH --time=0-5:50            # time (DD-HH:MM)
+#SBATCH --time=0-3:50            # time (DD-HH:MM)
 
 ###########cluster information above this line
 

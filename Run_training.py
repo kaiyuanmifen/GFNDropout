@@ -472,7 +472,7 @@ class MLPClassifier:
 
 		###Do not use test data to train mask or tune hyperparameter, it is cheating
 		x_test, y_test = iter(testloader).next()
-		x_test = x_test.to(device)
+		x_test,y_test = x_test.to(device),y_test.to(device)
 
 
 		augmented_X_tests=[]
@@ -560,6 +560,8 @@ class MLPClassifier:
 					elif args.RewardType==1:
 						
 						G_metric = self.model._gfn_step(x_mask=x_valid.reshape(x_valid.shape[0],-1), y_mask=y_valid ,x_reward=x_valid.reshape(x_valid.shape[0],-1), y_reward=y_valid)
+					
+
 					elif args.RewardType==2:
 						##build mask using validation set but get reward from different augmentation of the validation set
 						x_valid_augmented=[]
@@ -636,20 +638,20 @@ class MLPClassifier:
 				self.GFN_losses.append(0)
 
 			y_test_pred = self.predict(x_test).cpu()
-			self.test_accuracy.append(np.mean((y_test == y_test_pred).numpy()))
+			self.test_accuracy.append(np.mean((y_test.cpu() == y_test_pred.cpu()).numpy()))
 			self.test_error.append(int(len(testset)*(1-self.test_accuracy[-1])))
 
 			###validation acc
-			y_valid_pred = self.predict(x_valid).cpu()
+			y_valid_pred = self.predict(x_valid)
 
-			valid_acc=np.mean((y_valid == y_valid_pred).numpy())
+			valid_acc=np.mean((y_valid.cpu() == y_valid_pred.cpu()).numpy())
 
 			####OOD loss
 			OOD_accs=[]
 			OOD_testerrors=[]
 			for augmented_X_test in augmented_X_tests:
-				y_test_pred = self.predict(augmented_X_test).cpu()
-				OOD_accs.append(np.mean((y_test == y_test_pred).numpy()))
+				y_test_pred = self.predict(augmented_X_test)
+				OOD_accs.append(np.mean((y_test.cpu() == y_test_pred.cpu()).numpy()))
 				OOD_testerrors.append((int(len(testset)*(1-self.test_accuracy[-1]))))
 
 			
