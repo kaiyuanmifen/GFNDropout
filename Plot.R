@@ -25,8 +25,8 @@ for (File in AllFiles){
   
   Vec$Data=Infor[length(Infor)-7]
   
-  Vec$Method=paste0(Infor[1:(length(Infor)-8)],collapse = "_")
-  Vec$OODReward=as.integer(Infor[length(Infor)-3])
+  Vec$Method=paste0(Infor[1],"_",Infor[2],"_",Infor[7])
+  Vec$RewardType=as.integer(Infor[length(Infor)-3])
   
   Vec$beta=as.numeric(Infor[length(Infor)-4])
   

@@ -22,6 +22,7 @@ declare -a all_data=("CIFAR10" "MNIST" )
 
 #declare -a all_data=("CIFAR10")
 
+#declare -a all_methods=("MLP_GFFN" "MLP_nodropout" "MLP_StandoutAll" "MLP_dropoutAll" "MLP_SVDAll")
 declare -a all_methods=("MLP_GFFN")
 
 
@@ -32,7 +33,7 @@ declare -a all_p=(0.5)
 
 
 declare -a RewardTypes=(0 1 2)
-#declare -a RewardTypes=(0)
+#declare -a RewardTypes=(1)
 
 
 declare -a All_DataRatio=(1)
@@ -59,7 +60,7 @@ do
 						for round in "${all_rounds[@]}"
 						do
 
-							sbatch JobSubmit.sh $data $method $dim $p $RewardTypes $DataRatio $round	
+							sbatch JobSubmit.sh $data $method $dim $p $RewardType $DataRatio $round	
 						done
 					done
 				done
