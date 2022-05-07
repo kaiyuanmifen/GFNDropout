@@ -20,6 +20,8 @@ conda activate GFlownets
 #declare -a all_data=("MNIST" "CIFAR10")
 declare -a all_data=("CIFAR10" "MNIST" )
 
+#declare -a all_data=("CIFAR10")
+
 declare -a all_methods=("MLP_GFFN")
 
 
@@ -30,6 +32,8 @@ declare -a all_p=(0.5)
 
 
 declare -a RewardTypes=(0 1 2)
+#declare -a RewardTypes=(0)
+
 
 declare -a All_DataRatio=(1)
 

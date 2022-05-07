@@ -398,6 +398,8 @@ class MLP_GFFN(nn.Module):
         super().__init__()
         if hidden is None:
             hidden = [32, 32]
+
+        self.LN=nn.LayerNorm(in_dim)##normalize the input to prevent exploding
         h_old = in_dim
         self.fc = nn.ModuleList()
         for h in hidden:
@@ -407,6 +409,7 @@ class MLP_GFFN(nn.Module):
         self.activation = activation
 
     def forward(self, x):
+        x=self.LN(x)
         for layer in self.fc:
             x = self.activation()(layer(x))
         x = self.out_layer(x)
@@ -432,6 +435,7 @@ class MLPMaskedDropout(nn.Module):
         for layer, mg in zip(self.fc, mask_generators):
             x = self.activation()(layer(x))
             # generate mask & dropout
+
             m = mg(x).detach()
             masks.append(m)
             multipliers = m.shape[1] / (m.sum(1) + 1e-6)
@@ -480,12 +484,15 @@ class MLPMaskGenerator(nn.Module):
 
     def _dist(self, x):
         x = self.mlp(x)
+ 
         x = torch.sigmoid(x)
         dist = (1. - self.dropout_rate) * self.num_unit * x / (x.sum(1).unsqueeze(1) + 1e-6)
         dist = dist.clamp(0, 1)
         return dist
 
     def forward(self, x):
+        
+     
         return torch.bernoulli(self._dist(x))
 
     def log_prob(self, x, m):
