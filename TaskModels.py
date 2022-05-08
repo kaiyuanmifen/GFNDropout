@@ -781,6 +781,244 @@ class MLP_StandoutAll(nn.Module):
 
 
 
+
+#####resenet version
+
+import torchvision.models as models
+from collections import OrderedDict 
+
+class Resenet_Alldrop(nn.Module):
+    def __init__(self,num_classes,image_size,hidden_size,droprates):
+        super(Resenet_Alldrop, self).__init__()
+
+        self.image_size=image_size
+        self.resnet18 = models.resnet18(pretrained=False)
+        #print(self.resnet18)
+        num_ftrs = self.resnet18.fc.in_features
+        self.resnet18.fc = nn.Linear(num_ftrs, hidden_size)
+
+        self.fc2 = nn.Linear(hidden_size,hidden_size)
+        self.fc3 = nn.Linear(hidden_size,hidden_size)
+        self.output = nn.Linear(hidden_size, 10)
+
+
+        self.DIY_Dropout=DIY_Dropout(droprates)###make it part of the model so it gets the train/eval state
+
+        self.droprates=droprates
+        
+    def forward(self, x):
+        ###x come in the size (bsz,-1)
+
+        ###put x back into image size
+        x=x.reshape(x.shape[0],self.image_size[0],self.image_size[1],self.image_size[2])
+
+        x=self.resnet18(x)
+
+        x=self.DIY_Dropout(x)
+        x=F.relu(self.fc2(x))
+        x=self.DIY_Dropout(x)
+        x=F.relu(self.fc3(x))
+        x=self.DIY_Dropout(x)
+        #x=DIY_Dropout(p=self.droprates[1])(x)
+        x=self.output(x)
+
+        return x
+
+
+
+
+class Resenet_GFFN(nn.Module):
+    def __init__(
+            self,
+            image_size,
+            in_dim=784,
+            out_dim=10,
+            hidden=None,
+            activation=nn.LeakyReLU,
+            dropout_rate=0.5,
+            mg_type='random',
+            lr=1e-3,
+            z_lr=1e-1,
+            mg_lr=1e-3,
+            mg_hidden=None,
+            mg_activation=nn.LeakyReLU,
+            beta=0.1,
+            device='cpu',
+    ):
+        super().__init__()
+
+        ####Resnet
+
+        self.image_size=image_size
+        self.resnet18 = models.resnet18(pretrained=False).to(device)
+        #print(self.resnet18)
+        num_ftrs = self.resnet18.fc.in_features
+        self.resnet18.fc = nn.Linear(num_ftrs, in_dim)
+
+        # classifier
+        self.model = MLPMaskedDropout(
+            in_dim=in_dim,
+            out_dim=out_dim,
+            hidden=hidden,
+            activation=activation
+        ).to(device)
+        self.optimizer = optim.Adam(list(self.model.parameters())+list(self.resnet18.parameters()), lr=lr)
+
+        # mask generators
+        self.mg_type = mg_type
+        if mg_type == 'random':
+            self.mask_generators = construct_random_mask_generators(
+                model=self.model,
+                dropout_rate=dropout_rate
+            ).to(device)
+        elif mg_type == 'gfn':
+            # for backward log prob calculation only
+            self.rand_mask_generators = construct_random_mask_generators(
+                model=self.model,
+                dropout_rate=dropout_rate
+            ).to(device)
+            self.mask_generators = construct_mlp_mask_generators(
+                model=self.model,
+                dropout_rate=dropout_rate,
+                hidden=mg_hidden,
+                activation=mg_activation,
+            ).to(device)
+            
+            ####total flow (logZ) should condition on input or previous layoutout
+            #self.logZ = nn.Parameter(torch.tensor(0.)).to(device)
+            
+            self.total_flowestimator = MLP_GFFN(in_dim=in_dim,out_dim=1,
+                                    activation=mg_activation).to(device)
+            
+                        
+            #param_list = [{'params': self.model.parameters(), 'lr': mg_lr},
+            #              {'params': self.logZ, 'lr': z_lr}]
+
+            MaskGeneratorParameters=[]
+            for generator in self.mask_generators:
+                MaskGeneratorParameters+=list(generator.parameters())
+           
+            param_list = [{'params': MaskGeneratorParameters, 'lr': mg_lr},
+                         {'params': self.total_flowestimator.parameters(), 'lr': z_lr}]
+            
+
+            self.mg_optimizer = optim.Adam(param_list)
+        else:
+            raise ValueError('unknown mask generator type {}'.format(mg_type))
+
+        # gfn parameters
+        self.beta = beta
+
+    def step(self, x, y):
+
+        ###x come in the size (bsz,-1)
+
+        ###put x back into image size
+        x=x.reshape(x.shape[0],self.image_size[0],self.image_size[1],self.image_size[2])
+
+        ###go through resnet first
+        x=self.resnet18(x)
+
+        ###then get into the FFL layers
+        metric = {}
+        logits, masks = self.model(x, self.mask_generators)
+        # Update model
+        self.optimizer.zero_grad()
+        loss = nn.CrossEntropyLoss()(logits, y)
+        acc = (torch.argmax(logits, dim=1) == y).sum().item() / len(y)
+        metric['loss'] = loss.item()
+        metric['acc'] = acc
+        loss.backward()
+        self.optimizer.step()
+
+        # # Update mask generators
+        # if self.mg_type == 'gfn':
+        #     if x_valid is not None and y_valid is not None:
+        #         #update using validation set
+        #         metric.update(self._gfn_step(x_valid, y_valid,x_valid, y_valid))
+        #     else:
+        #         metric.update(self._gfn_step(x, y,x,y))
+
+        return logits,metric
+
+    def _gfn_step(self, x_mask, y_mask,x_reward,y_reward):
+
+        ###x come in the size (bsz,-1)
+
+        ###put x back into image size
+        x_mask= x_mask.reshape(x_mask.shape[0],self.image_size[0],self.image_size[1],self.image_size[2])
+        x_reward= x_reward.reshape(x_reward.shape[0],self.image_size[0],self.image_size[1],self.image_size[2])
+
+
+        ###go through resnet first
+        x_mask=self.resnet18(x_mask)
+        x_reward=self.resnet18(x_reward)
+                
+
+        #####this step allows us to use different x,y to generate mask and calcualte reward(loss)
+
+        metric = {}
+        #generate mask
+        _, masks = self.model(x_mask, self.mask_generators)
+
+        ###for loss
+        logits, _ = self.model.forward_predifinedMask(x_reward, masks)
+                
+
+        with torch.no_grad():
+            losses = nn.CrossEntropyLoss(reduce=False)(logits, y_reward)
+            log_rewards = - self.beta * losses
+            logZ=self.total_flowestimator(x_mask)#this flow is calculated using x_mask, not a bug , to encourage generalization 
+        # trajectory balance loss
+        log_probs_F = []
+        log_probs_B = []
+        for m, mg_f, mg_b in zip(masks, self.mask_generators, self.rand_mask_generators):
+            log_probs_F.append(mg_f.log_prob(m, m).unsqueeze(1))
+            log_probs_B.append(mg_b.log_prob(m, m).unsqueeze(1))
+        tb_loss = ((logZ - log_rewards
+                    + torch.cat(log_probs_F, dim=1).sum(dim=1)
+                    - torch.cat(log_probs_B, dim=1).sum(dim=1)) ** 2).mean()
+        metric['tb_loss'] = tb_loss.item()
+        self.mg_optimizer.zero_grad()
+        tb_loss.backward()
+        self.mg_optimizer.step()
+
+        return metric
+
+    def test(self, x, y):
+
+        ###x come in the size (bsz,-1)
+
+        ###put x back into image size
+        x=x.reshape(x.shape[0],self.image_size[0],self.image_size[1],self.image_size[2])
+
+        ###go through resnet first
+        x=self.resnet18(x)
+
+        metric = {}
+        logits, masks = self.model(x, self.mask_generators)
+        loss = nn.CrossEntropyLoss()(logits, y)
+        acc = (torch.argmax(logits, dim=1) == y).sum().item() / len(y)
+        metric['loss'] = loss.item()
+        metric['acc'] = acc
+
+        return metric
+
+    def forward(self,x):
+
+        ###x come in the size (bsz,-1)
+
+        ###put x back into image size
+        x=x.reshape(x.shape[0],self.image_size[0],self.image_size[1],self.image_size[2])
+
+        ###go through resnet first
+        x=self.resnet18(x)
+
+        logits, masks = self.model(x, self.mask_generators)
+
+        return logits
+
+
 if __name__ == "__main__":
     
     bz=12

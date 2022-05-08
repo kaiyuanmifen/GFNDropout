@@ -21,6 +21,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data.sampler import SubsetRandomSampler
+import random
 
 import numpy as np
 import pandas as pd
@@ -150,16 +151,17 @@ if args.Data=="MNIST":
 
 	#policies = [T.AutoAugmentPolicy.MNIST
 	#half augmenters are used for GFN reward, the other half used for OOD testing
-	augmenters=[transforms.RandomRotation(degrees=(0,90)),
+	augmenters_train=[transforms.RandomRotation(degrees=(0,90)),
 				transforms.GaussianBlur(kernel_size=(5, 9), sigma=(0.1, 5)),
-				transforms.RandomAffine(degrees=(30, 70), translate=(0.1, 0.3), scale=(0.5, 0.75)),
-				transforms.RandomRotation(degrees=(90, 180)),
+				transforms.RandomAffine(degrees=(30, 70), translate=(0.1, 0.3), scale=(0.5, 0.75))]
+
+	augmenters_test=[transforms.RandomRotation(degrees=(90, 180)),
 				transforms.RandomResizedCrop(size=(28, 28)),
 				transforms.RandomPerspective(distortion_scale=0.6, p=1.0)]
 		
 
 	#augmenter = transforms.RandomRotation(degrees=(0, 180))
-	for idx,augmenter in enumerate(augmenters):
+	for idx,augmenter in enumerate(augmenters_train):
 		#rotated_imgs = [rotater(orig_img) for _ in range(4)]
 		Augmented_imgs=[augmenter(images[j]).unsqueeze(0) for j in range(10)]
 		Augmented_imgs=torch.cat(Augmented_imgs,0)
@@ -208,7 +210,7 @@ if args.Data=="CIFAR10":
 		
 
 
-	testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
+	testloader = torch.utils.data.DataLoader(testset, batch_size=len(testset),
 											 shuffle=False, num_workers=2)
 
 
@@ -243,16 +245,17 @@ if args.Data=="CIFAR10":
 	print(' '.join(f'{classes[labels[j]]:5s}' for j in range(batch_size)))
 	
 	#half augmenters are used for GFN reward, the other half used for OOD testing
-	augmenters=[transforms.RandomRotation(degrees=(0,90)),
+	augmenters_train=[transforms.RandomRotation(degrees=(0,90)),
 				transforms.GaussianBlur(kernel_size=(5, 9), sigma=(0.1, 5)),
-				transforms.RandomAffine(degrees=(30, 70), translate=(0.1, 0.3), scale=(0.5, 0.75)),
-				transforms.RandomRotation(degrees=(90, 180)),
-				transforms.RandomResizedCrop(size=(32, 32)),
-				transforms.RandomPerspective(distortion_scale=0.6, p=1.0)]
+				transforms.RandomAffine(degrees=(30, 70), translate=(0.1, 0.3), scale=(0.5, 0.75))]
 		
+	augmenters_test=[transforms.RandomRotation(degrees=(90, 180)),
+			transforms.RandomResizedCrop(size=(32, 32)),
+			transforms.RandomPerspective(distortion_scale=0.6, p=1.0)]
+	
 
 	#augmenter = transforms.RandomRotation(degrees=(0, 180))
-	for idx,augmenter in enumerate(augmenters):
+	for idx,augmenter in enumerate(augmenters_train):
 		#rotated_imgs = [rotater(orig_img) for _ in range(4)]
 		Augmented_imgs=[augmenter(images[j]).unsqueeze(0) for j in range(30)]
 		Augmented_imgs=torch.cat(Augmented_imgs,0)
@@ -295,7 +298,7 @@ if args.Data=="SVHN":
 		
 
 
-	testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
+	testloader = torch.utils.data.DataLoader(testset, batch_size=len(testset),
 											 shuffle=False, num_workers=2)
 
 	print("training set length")
@@ -328,16 +331,17 @@ if args.Data=="SVHN":
 	# print(' '.join(f'{classes[labels[j]]:5s}' for j in range(batch_size)))
 	
 	#half augmenters are used for GFN reward, the other half used for OOD testing
-	augmenters=[transforms.RandomRotation(degrees=(0,90)),
+	augmenters_train=[transforms.RandomRotation(degrees=(0,90)),
 				transforms.GaussianBlur(kernel_size=(5, 9), sigma=(0.1, 5)),
-				transforms.RandomAffine(degrees=(30, 70), translate=(0.1, 0.3), scale=(0.5, 0.75)),
-				transforms.RandomRotation(degrees=(90, 180)),
-				transforms.RandomResizedCrop(size=(32, 32)),
-				transforms.RandomPerspective(distortion_scale=0.6, p=1.0)]
+				transforms.RandomAffine(degrees=(30, 70), translate=(0.1, 0.3))]
+
+	augmenters_test=[transforms.RandomRotation(degrees=(90, 180)),
+			transforms.RandomResizedCrop(size=(32, 32)),
+			transforms.RandomPerspective(distortion_scale=0.6, p=1.0)]
 		
 
 	#augmenter = transforms.RandomRotation(degrees=(0, 180))
-	for idx,augmenter in enumerate(augmenters):
+	for idx,augmenter in enumerate(augmenters_train):
 		#rotated_imgs = [rotater(orig_img) for _ in range(4)]
 		Augmented_imgs=[augmenter(images[j]).unsqueeze(0) for j in range(30)]
 		Augmented_imgs=torch.cat(Augmented_imgs,0)
@@ -423,6 +427,29 @@ class MLPClassifier:
 			self.model = CNN_SVD(image_size=image_size,hidden_size=N_units,droprates=droprates)
 
 
+		####ReNet
+		elif self.model_type=="RESNET_GFFN":#GFFN means faster version of the GFN
+			self.model =Resenet_GFFN(image_size=image_size,
+														in_dim=N_units,
+											            out_dim=10,
+											            hidden=(N_units,N_units,N_units,N_units),
+											            activation=nn.LeakyReLU,
+											            dropout_rate=droprates,
+											            mg_type='gfn',
+											            lr=1e-3,
+											            z_lr=1e-1,
+											            mg_lr=1e-3,
+											            mg_hidden=None,
+											            mg_activation=nn.LeakyReLU,
+											            beta=1,
+											            device=device,)
+
+
+		elif self.model_type=="RESNET_dropoutAll":
+			#dropour on all layers
+		  self.model = Resenet_Alldrop(num_classes=10,image_size=image_size,hidden_size=N_units,droprates=droprates)
+
+
 		self.model.to(device)
 		self.criterion = nn.CrossEntropyLoss().to(device)
 		self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
@@ -469,16 +496,28 @@ class MLPClassifier:
 		x_valid, y_valid = iter(validloader).next()
 		x_valid, y_valid = x_valid.to(device),y_valid.to(device)
 
+		##augment x_valid once and use it for all epoch/step ( for reward type 2)
+		x_valid_augmented=[]
+		for idx in range(x_valid.shape[0]):
+			####randomly augment half of the validation set
+			if random.randrange(100)<50:
+				augmenter=random.choice(augmenters_train)#randomly pick an augmenter
+				vec_augmented=augmenter(x_valid[idx,:].unsqueeze(0))
+				x_valid_augmented.append(vec_augmented)
+			else:
+				x_valid_augmented.append(x_valid[idx,:].unsqueeze(0))
+		x_valid_augmented=torch.cat(x_valid_augmented,0)
+
 
 		###Do not use test data to train mask or tune hyperparameter, it is cheating
 		x_test, y_test = iter(testloader).next()
 		x_test,y_test = x_test.to(device),y_test.to(device)
 
 
+		####test on augmented data ( different augmentations!)
 		augmented_X_tests=[]
-		####augmenter0,1,2 for GFN training , 3,4,5 for OOD test
-		for idx,augmenter in enumerate(augmenters):
-			if idx<(len(augmenters)//2):
+		
+		for idx,augmenter in enumerate(augmenters_test):
 				augmented_X_tests.append(augmenter(x_test.detach().clone().to(device)))
 
 		best_valid_acc=0
@@ -564,17 +603,22 @@ class MLPClassifier:
 
 					elif args.RewardType==2:
 						##build mask using validation set but get reward from different augmentation of the validation set
-						x_valid_augmented=[]
-						x_valid_original=[]
-						y_valid_original=[]
-						for idx, augmenter in enumerate(augmenters):
-							if idx>=(len(augmenters)//2):
-								x_valid_augmented.append(augmenter(x_valid).reshape(x_valid.shape[0],-1).detach().clone().to(device))
-								x_valid_original.append(x_valid.reshape(x_valid.shape[0],-1))
-								y_valid_original.append(y_valid)
-						x_valid_original=torch.cat(x_valid_original,0)
-						x_valid_augmented=torch.cat(x_valid_augmented,0)#augmented x_valid
-						y_valid_original=torch.cat(y_valid_original,0)
+						x_valid_original=x_valid
+						y_valid_original=y_valid
+
+						x_valid_original=x_valid_original.reshape(x_valid_original.shape[0],-1)
+						x_valid_augmented=x_valid_augmented.reshape(x_valid_augmented.shape[0],-1)						
+						# x_valid_augmented=[]
+						# x_valid_original=[]
+						# y_valid_original=[]
+						# for idx, augmenter in enumerate(augmenters):
+						# 	if idx>=(len(augmenters)//2):
+						# 		x_valid_augmented.append(augmenter(x_valid).reshape(x_valid.shape[0],-1).detach().clone().to(device))
+						# 		x_valid_original.append(x_valid.reshape(x_valid.shape[0],-1))
+						# 		y_valid_original.append(y_valid)
+						# x_valid_original=torch.cat(x_valid_original,0)
+						# x_valid_augmented=torch.cat(x_valid_augmented,0)#augmented x_valid
+						# y_valid_original=torch.cat(y_valid_original,0)
 
 						G_metric = self.model._gfn_step(x_mask=x_valid_original, y_mask=y_valid_original ,x_reward=x_valid_augmented, y_reward=y_valid_original)
 						
