@@ -119,7 +119,7 @@ if args.Data=="MNIST":
 	# Visualize 10 image samples in MNIST dataset
 	trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=2)
 
-	validloader = torch.utils.data.DataLoader(validset, batch_size=len(validset), shuffle=False)
+	validloader = torch.utils.data.DataLoader(validset, batch_size=batch_size, shuffle=False)
 		
 
 	testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size, shuffle=False)
@@ -204,7 +204,7 @@ if args.Data=="CIFAR10":
 											  shuffle=True)
 
 
-	validloader = torch.utils.data.DataLoader(validset, batch_size=len(validset), shuffle=False)
+	validloader = torch.utils.data.DataLoader(validset, batch_size=batch_size, shuffle=False)
 		
 
 	# Also use CIFAR 10 C for testing 
@@ -300,7 +300,7 @@ if args.Data=="SVHN":
 											  shuffle=True, num_workers=2)
 
 
-	validloader = torch.utils.data.DataLoader(validset, batch_size=len(validset), shuffle=False)
+	validloader = torch.utils.data.DataLoader(validset, batch_size=batch_size, shuffle=False)
 		
 
 
@@ -475,20 +475,7 @@ class MLPClassifier:
 	def fit(self,verbose=True):
 		# Training, make sure it's on GPU, otherwise, very slow...
 
-		####pick early stop, train mask etc.
-		x_valid, y_valid = iter(validloader).next()
-		x_valid, y_valid = x_valid.to(device),y_valid.to(device)
-		##augment x_valid once and use it for all epoch/step ( for reward type 2)
-		x_valid_augmented=[]
-		for idx in range(x_valid.shape[0]):
-			####randomly augment half of the validation set
-			if random.randrange(100)<50:
-				augmenter=random.choice(augmenters_train)#randomly pick an augmenter
-				vec_augmented=augmenter(x_valid[idx,:].unsqueeze(0))
-				x_valid_augmented.append(vec_augmented)
-			else:
-				x_valid_augmented.append(x_valid[idx,:].unsqueeze(0))
-		x_valid_augmented=torch.cat(x_valid_augmented,0)
+		
 
 		best_valid_acc=0
 		for epoch in range(self.max_epoch):
@@ -566,24 +553,42 @@ class MLPClassifier:
 					if args.RewardType==0:
 						G_metric = self.model._gfn_step(x_mask=x_train, y_mask=y_train ,x_reward=x_train, y_reward=y_train)
 					elif args.RewardType==1:
-						
-						G_metric = self.model._gfn_step(x_mask=x_valid, y_mask=y_valid ,x_reward=x_valid, y_reward=y_valid)
+						G_metric={}
+						G_metric_batch_losses = []
+						####pick early stop, train mask etc.
+						for i, valid_data in enumerate(validloader):
+							x_valid, y_valid = valid_data
+							x_valid, y_valid = x_valid.to(device),y_valid.to(device)
+							
+										
+							G_metric_batch = self.model._gfn_step(x_mask=x_valid, y_mask=y_valid ,x_reward=x_valid, y_reward=y_valid)
+							G_metric_batch_losses.append(G_metric_batch['tb_loss'])
+						G_metric['tb_loss'] = np.mean(G_metric_batch_losses)
 					
 
 					elif args.RewardType==2:
 						##build mask using validation set but get reward from different augmentation of the validation set
-						x_valid_original=x_valid
-						y_valid_original=y_valid
-						import pdb; pdb.set_trace() 
-						x_valid_augmented=x_valid_augmented						
-					
 
-						G_metric = self.model._gfn_step(x_mask=x_valid_original, y_mask=y_valid_original ,x_reward=x_valid_augmented, y_reward=y_valid_original)
-
-						
-						# Delete to save memory. Idea from Bona
-						del x_valid_original
-						del y_valid_original
+						G_metric={}
+						G_metric_batch_losses = []
+						####pick early stop, train mask etc.
+						for i, valid_data in enumerate(validloader):
+							x_valid, y_valid = valid_data
+							x_valid, y_valid = x_valid.to(device),y_valid.to(device)
+							##augment x_valid once and use it for all epoch/step ( for reward type 2)
+							x_valid_augmented=[]
+							for idx in range(x_valid.shape[0]):
+								####randomly augment half of the validation set
+								if random.randrange(100)<50:
+									augmenter=random.choice(augmenters_train)#randomly pick an augmenter
+									vec_augmented=augmenter(x_valid[idx,:].unsqueeze(0))
+									x_valid_augmented.append(vec_augmented)
+								else:
+									x_valid_augmented.append(x_valid[idx,:].unsqueeze(0))
+							x_valid_augmented=torch.cat(x_valid_augmented,0)
+							G_metric_batch = self.model._gfn_step(x_mask=x_valid, y_mask=y_valid ,x_reward=x_valid_augmented, y_reward=y_valid)
+							G_metric_batch_losses.append(G_metric_batch['tb_loss'])
+						G_metric['tb_loss'] = np.mean(G_metric_batch_losses)
 						
 										
 
@@ -671,15 +676,20 @@ class MLPClassifier:
 					ood_acc_ = np.mean((y_test.cpu() == y_test_pred.cpu()).numpy())
 					OOD_batch_accs.append(ood_acc_)
 					OOD_batch_error.append(int(len(augmented_X_test)*(1-ood_acc_)))
-				OOD_accs.appen(np.mean(OOD_batch_accs))
+				OOD_accs.append(np.mean(OOD_batch_accs))
 				OOD_testerrors.append(np.mean(OOD_batch_error))
 	
 			self.test_accuracy.append(np.mean(batch_test_accs))
 			self.test_error.append(np.mean(batch_test_error))
 
 			###validation acc
-			y_valid_pred = self.predict(x_valid)
-			valid_acc=np.mean((y_valid.cpu() == y_valid_pred.cpu()).numpy())
+			valid_acc_batch=[]
+			for i, valid_data in enumerate(validloader):
+				x_valid, y_valid = valid_data
+				x_valid, y_valid = x_valid.to(device),y_valid.to(device)
+				y_valid_pred = self.predict(x_valid)
+				valid_acc_batch.append(np.mean((y_valid.cpu() == y_valid_pred.cpu()).numpy()))
+			valid_acc = np.mean(valid_acc_batch)	
 
 
 			self.test_accuracy_OOD.append(np.mean(OOD_accs))

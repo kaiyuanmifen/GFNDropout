@@ -51,13 +51,15 @@ head(Data)
 
 for (Model in c("RESNET")){
   for (DataNames in c("SVHN", "CIFAR10","MNIST")){
-    for (N_units in c(80)){
+    for (N_units in c(1024)){
       for (p in c(0.5)){
+          for (beta in c(1.0)){
         for (OODReward in c(1,0)){
+          for (seed in c(1)){
 
-Exp=paste0(Model,"_",DataNames,"_",N_units,"_",p,"_",OODReward)
+Exp=paste0(Model,"_",DataNames,"_",N_units,"_",p,"_",beta,"_",OODReward,"_",seed)
           
-VecPlot1=Data[(Data$Data==DataNames)&(Data$Method%in%paste0(Model,c("_GFNDB","_GFNFM")))&(Data$N_units==N_units)&(Data$p==p)&(Data$OODReward==OODReward),]
+VecPlot1=Data[(Data$Data==DataNames)&(Data$Method%in%paste0(Model,c("_GFNDB","_GFNFM","_GFFN")))&(Data$N_units==N_units)&(Data$p==p)&(Data$OODReward==OODReward),]
 VecPlot2=Data[(Data$Data==DataNames)&(Data$Method%in%paste0(Model,c("_dropout","_Standout")))&(Data$N_units==N_units)&(Data$p==p),]
 VecPlot3=Data[(Data$Data==DataNames)&(Data$Method%in%paste0(Model,c( "_nodropout","_SVD")))&(Data$N_units==N_units),]
 
@@ -87,6 +89,8 @@ ggsave(plot = Plot,paste0('images/',Exp,"_testaccOOD.png"),scale=3)
 
       }
     }
+  }
+}
   }
 }
 # 

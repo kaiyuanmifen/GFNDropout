@@ -48,8 +48,8 @@ class MLP_MaskedDropout(nn.Module):
         super(MLP_MaskedDropout, self).__init__()
 
   
-        self.fc1 = nn.Linear(Input_size,4*hidden_size)
-        self.fc2 = nn.Linear(4*hidden_size,hidden_size)
+        self.fc1 = nn.Linear(Input_size,hidden_size)
+        self.fc2 = nn.Linear(hidden_size,hidden_size)
         self.fc3 = nn.Linear(hidden_size, 10)
 
         self.Mask_Dropout=Mask_Dropout()###make it part of the model so it gets the train/eval state
@@ -389,7 +389,7 @@ class CNN_SVD(nn.Module):
 
 
 
-#------------------------------------RESNET GFN-----------------------------------------------------------------
+#------------------------------------RESNET GFFN-----------------------------------------------------------------
 class RESNET_GFFN(nn.Module):
    
     def __init__(self,num_layers,img_channels=3,out_dim=10,hidden=None,activation=nn.LeakyReLU):
@@ -533,6 +533,29 @@ class ResNet_MaskedDropout_GFFN(nn.Module):
         x = self.out_layer(x)
         return x, masks
 
+    def forward_predifinedMask(self, x, mask):
+        ###forward using predefined mask
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.maxpool(x)
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.layer4(x)
+        x = self.avgpool(x)
+        x = x.reshape(x.shape[0], -1)
+        
+        masks = []
+        for layer, m in zip(self.fc, mask):
+            x = self.activation()(layer(x))
+            
+            masks.append(m)
+            multipliers = m.shape[1] / (m.sum(1) + 1e-6)
+            x = torch.mul((x * m).T, multipliers).T
+        x = self.out_layer(x)
+        return x, masks   
+
     def make_layers(self, num_layers, block, num_residual_blocks, intermediate_channels, stride):
         layers = []
 
@@ -559,19 +582,37 @@ class RandomMaskGenerator(nn.Module):
         return torch.log(probs).sum(1)
 
 
-class RESNETMaskGenerator(nn.Module):
-    def __init__(self, num_layers,img_channels,num_unit, dropout_rate, hidden=None, activation=nn.LeakyReLU):
+class MLP_GFFN(nn.Module):
+    def __init__(self, in_dim=784, out_dim=10, hidden=None, activation=nn.LeakyReLU):
+        super().__init__()
+        if hidden is None:
+            hidden = [32, 32]
+        h_old = in_dim
+        self.fc = nn.ModuleList()
+        for h in hidden:
+            self.fc.append(nn.Linear(h_old, h))
+            h_old = h
+        self.out_layer = nn.Linear(h_old, out_dim)
+        self.activation = activation
+
+    def forward(self, x):
+        for layer in self.fc:
+            x = self.activation()(layer(x))
+        x = self.out_layer(x)
+        return x
+
+class MLPMaskGenerator(nn.Module):
+    def __init__(self, num_unit, dropout_rate, hidden=None, activation=nn.LeakyReLU):
         super().__init__()
         self.num_unit = torch.tensor(num_unit).type(torch.float32)
         self.dropout_rate = torch.tensor(dropout_rate).type(torch.float32)
-        self.mlp = RESNET_GFFN(
-            num_layers = num_layers,
-            img_channels = img_channels,           
+        self.mlp = MLP_GFFN(
+            in_dim=num_unit,
             out_dim=num_unit,
             hidden=hidden,
             activation=activation,
         )
-      
+
     def _dist(self, x):
         x = self.mlp(x)
         x = torch.sigmoid(x)
@@ -602,10 +643,8 @@ def construct_random_mask_generators(
 
     return mask_generators
 
-def construct_resnet_mask_generators(
+def construct_mlp_mask_generators(
         model,
-        num_layers,
-        img_channels,
         dropout_rate,
         hidden=None,
         activation=nn.LeakyReLU
@@ -613,9 +652,7 @@ def construct_resnet_mask_generators(
     mask_generators = nn.ModuleList()
     for layer in model.fc:
         mask_generators.append(
-            RESNETMaskGenerator(
-                num_layers = num_layers,
-                img_channels = img_channels,
+             MLPMaskGenerator(
                 num_unit=layer.weight.shape[0],
                 dropout_rate=dropout_rate,
                 hidden=hidden,
@@ -672,10 +709,8 @@ class RESNETClassifierWithMaskGenerator(nn.Module):
                 model=self.model,
                 dropout_rate=dropout_rate
             ).to(device)
-            self.mask_generators = construct_resnet_mask_generators(
+            self.mask_generators = construct_mlp_mask_generators(
                 model=self.model,
-                num_layers = num_layers,
-                img_channels = img_channels,
                 dropout_rate=dropout_rate,
                 hidden=mg_hidden,
                 activation=mg_activation,
@@ -721,21 +756,29 @@ class RESNETClassifierWithMaskGenerator(nn.Module):
         self.optimizer.step()
 
         # Update mask generators
-        if self.mg_type == 'gfn':
-            if x_valid is not None and y_valid is not None:
-                metric.update(self._gfn_step(x_valid, y_valid))
-            else:
-                metric.update(self._gfn_step(x, y))
+        #if self.mg_type == 'gfn':
+        #    if x_valid is not None and y_valid is not None:
+        #        metric.update(self._gfn_step(x_valid, y_valid))
+        #    else:
+        #        metric.update(self._gfn_step(x, y))
 
         return logits,metric
 
-    def _gfn_step(self, x, y):
+    def _gfn_step(self, x_mask, y_mask,x_reward,y_reward):
+        #####this step allows us to use different x,y to generate mask and calcualte reward(loss)
+
         metric = {}
-        logits, masks = self.model(x, self.mask_generators)
+        #generate mask
+        _, masks = self.model(x_mask, self.mask_generators)
+
+        ###for loss
+        logits, _ = self.model.forward_predifinedMask(x_reward, masks)
+                
+
         with torch.no_grad():
-            losses = nn.CrossEntropyLoss(reduce=False)(logits, y)
+            losses = nn.CrossEntropyLoss(reduce=False)(logits, y_reward)
             log_rewards = - self.beta * losses
-            logZ=self.total_flowestimator(x)
+            logZ=self.total_flowestimator(x_mask)#this flow is calculated using x_mask, not a bug , to encourage generalization 
         # trajectory balance loss
         log_probs_F = []
         log_probs_B = []

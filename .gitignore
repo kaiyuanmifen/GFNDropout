@@ -6,3 +6,4 @@ checkpoints/
 .RData
 .Rhistory
 Plot.Rout
+CIFAR-10-C/*
