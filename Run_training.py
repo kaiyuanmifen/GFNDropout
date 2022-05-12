@@ -25,17 +25,10 @@ import random
 
 import numpy as np
 import pandas as pd
-import time
 import h5py
 from scipy.ndimage.interpolation import rotate
-
 import argparse
-
 matplotlib.use('AGG')
-
-
-
-
 
 parser = argparse.ArgumentParser()
 
@@ -67,6 +60,9 @@ parser.add_argument('--DataRatio', type=float, default=1.0,
 
 parser.add_argument('--beta', type=float, default=1.0,
 					help='how sharp the reward for GFN is')
+parser.add_argument('--folder', type=str, default='Results',
+					help='Folder to store the results of the experiments')
+
 
 args = parser.parse_args()
 
@@ -75,6 +71,8 @@ torch.manual_seed(args.seed)
 if torch.cuda.is_available():
 	torch.cuda.manual_seed(args.seed)
 
+EXP_FOLDER = args.folder
+os.makedirs(EXP_FOLDER,exist_ok=True)
 
 
 Task_name=args.Method+"_"+args.Data+"_"+str(args.Hidden_dim)+"_"+str(args.p)+"_"+str(args.beta)+"_"+str(args.RewardType)+"_"+str(args.DataRatio)+"_"+str(args.seed)
@@ -709,24 +707,31 @@ class MLPClassifier:
 				self.corrupted_accs.append(np.mean(corrupted_accs))
 
 			
-			df = pd.DataFrame({'train_loss':self.loss_,
+				df = pd.DataFrame({'train_loss':self.loss_,
 							'test_acc':self.test_accuracy,
 							'test_error':self.test_error,
 							"GFN_losses":self.GFN_losses,
 							'test_acc_OOD':self.test_accuracy_OOD,
 							'test_error_OOD':self.test_error_OOD,
 							'CIFAR_10C_acc':self.corrupted_accs})
-					
+			else:
+				df = pd.DataFrame({'train_loss':self.loss_,
+							'test_acc':self.test_accuracy,
+							'test_error':self.test_error,
+							"GFN_losses":self.GFN_losses,
+							'test_acc_OOD':self.test_accuracy_OOD,
+							'test_error_OOD':self.test_error_OOD})
+							
 
 
-			df.to_csv("Results/"+Task_name+"_performance.csv")
+			df.to_csv(f"{EXP_FOLDER}/"+Task_name+"_performance.csv")
 
 			if verbose and epoch%1==0:
 				print('Test error: {}; test accuracy: {} ,train loss: {} GFN loss: {} Valid_acc: {}'.format(self.test_error[-1], self.test_accuracy[-1],self.loss_[-1],self.GFN_losses[-1],valid_acc))
 			
 			if valid_acc> best_valid_acc:
 				#use validation performance to decide early stopping
-				torch.save(self.model.state_dict(), "checkpoints/"+Task_name+'.pt')
+				torch.save(self.model.state_dict(), "/home/mila/c/chris.emezue/scratch/gfndropout/checkpoints/"+Task_name+'.pt')
 				best_valid_acc=valid_acc
 
 
@@ -848,14 +853,14 @@ for ind, mlp in enumerate(mlp1):
 	mlp.test_error = list(map(str, mlp.test_error))
 
 # Save test errors to plot figures
-#open("Results/"+Task_name+"test_errors.txt","w").write('\n'.join([','.join(mlp.test_error) for mlp in mlp1])) 
+#open(f"{EXP_FOLDER}/"+Task_name+"test_errors.txt","w").write('\n'.join([','.join(mlp.test_error) for mlp in mlp1])) 
 
 
 # Load saved models to CPU
 #mlp1_models = [torch.load('mnist_mlp1_'+str(ind)+'.pth',map_location={'cuda:0': 'cpu'}) for ind in [0,1,2]]
 
 # Load saved test errors to plot figures.
-#mlp1_test_errors = [error_array.split(',') for error_array in open("Results/"+Task_name+"test_errors.txt","r").read().split('\n')]
+#mlp1_test_errors = [error_array.split(',') for error_array in open(f"{EXP_FOLDER}/"+Task_name+"test_errors.txt","r").read().split('\n')]
 #mlp1_test_errors = np.array(mlp1_test_errors,dtype='f')
 
 
@@ -876,5 +881,5 @@ for ind, mlp in enumerate(mlp1):
 #plt.xlabel('Epochs');
 #plt.ylabel('Number of errors in test set');
 #plt.title('Test error on MNIST dataset for RESNET')
-#plt.savefig('Results/'+Task_name+'PerformanceVsepisodes.png')
+#plt.savefig(f"{EXP_FOLDER}/"+Task_name+'PerformanceVsepisodes.png')
 #plt.clf()

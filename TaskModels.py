@@ -1,13 +1,8 @@
 
 import torch
 import numpy as np
-
-import torch.nn as nn
-
 import torch.nn.functional as F
-
 import torch
-
 from torch.autograd import Variable
 import torch.nn as nn
 import torch.nn.functional as F
@@ -509,6 +504,8 @@ class ResNet_MaskedDropout_GFFN(nn.Module):
         
         self.out_layer = nn.Linear(h_old, out_dim)
         self.activation = activation
+
+       
 
     def forward(self, x,mask_generators):
         x = self.conv1(x)
