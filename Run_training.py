@@ -1,4 +1,4 @@
-
+from wilds import get_dataset
 import torch
 import numpy as np
 import torch.optim as optim 
@@ -97,8 +97,8 @@ if args.Data=="MNIST":
 	transform = transforms.Compose([transforms.ToTensor(), \
 									transforms.Normalize((0), (1))])
 
-	trainset = datasets.MNIST(root='../../data/', train=True, download=True, transform=transform)
-	testset = datasets.MNIST(root='../../data/', train=False, transform=transform)
+	trainset = datasets.MNIST(root='data', train=True, download=True, transform=transform)
+	testset = datasets.MNIST(root='data/', train=False, transform=transform)
 
 	indices = torch.randperm(len(trainset))[:int(len(trainset)*args.DataRatio)]
 	#indices = torch.randperm(len(trainset))
@@ -182,11 +182,11 @@ if args.Data=="CIFAR10":
 	[transforms.ToTensor(),
 	 transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
 
-	trainset = torchvision.datasets.CIFAR10(root='../../data', train=True,
+	trainset = torchvision.datasets.CIFAR10(root='data', train=True,
 											download=True, transform=transform)
 
 
-	testset = torchvision.datasets.CIFAR10(root='../../data', train=False,
+	testset = torchvision.datasets.CIFAR10(root='data', train=False,
 										   download=True, transform=transform)
 	
 	#indices = torch.randperm(len(trainset))[:1000]
@@ -272,11 +272,11 @@ if args.Data=="SVHN":
 	[transforms.ToTensor(),
 	 transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
 
-	trainset = torchvision.datasets.SVHN(root='../../data', split="train",
+	trainset = torchvision.datasets.SVHN(root='data', split="train",
 											download=True, transform=transform)
 
 
-	testset = torchvision.datasets.SVHN(root='../../data', split="test",
+	testset = torchvision.datasets.SVHN(root='data', split="test",
 										   download=True, transform=transform)
 	
 
@@ -352,6 +352,85 @@ if args.Data=="SVHN":
 		plt.imshow(np.transpose(npimg, (1, 2, 0)))
 		plt.savefig('images/AugmentedSVHN_'+str(idx)+'.png')
 
+if args.Data == "camelyon17":
+
+	transform = transforms.Compose(
+	[transforms.ToTensor(),transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+
+	# Load the full dataset, and download it if necessary
+	dataset = get_dataset(dataset="camelyon17", download=True, root_dir='data')
+	trainset = dataset.get_subset("train", transform=transform)
+	testset = dataset.get_subset("test", transform=transform)
+	validset = dataset.get_subset("val", transform=transform)
+	
+
+	# indices = torch.randperm(len(trainset))[:int(len(trainset)*args.DataRatio)]
+
+	# validset =torch.utils.data.Subset(trainset, indices[int(0.7*len(indices)):(int(1*len(indices))-1)])
+	# trainset =torch.utils.data.Subset(trainset, indices[:int(0.7*len(indices))])
+
+	# indices = torch.randperm(len(testset))
+
+	# testset = torch.utils.data.Subset(testset, indices)
+	
+	trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
+											  shuffle=True, num_workers=2)
+
+
+	validloader = torch.utils.data.DataLoader(validset, batch_size=64, shuffle=False)
+	testloader = torch.utils.data.DataLoader(testset, batch_size=64,
+											 shuffle=False, num_workers=2)
+
+	print("training set length")
+	print(len(trainset))
+
+	print("validation set length")
+	print(len(validset))
+
+
+	print("test set length")
+	print(len(testset))
+	# classes = ('plane', 'car', 'bird', 'cat',
+	# 		   'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
+
+	def imshow(img):
+		img = img / 2 + 0.5     # unnormalize
+		npimg = img.numpy()
+		plt.imshow(np.transpose(npimg, (1, 2, 0)))
+		plt.savefig('images/DataExamplesCamelyon17.png')
+
+	####show some examples
+	dataiter = iter(trainloader)
+	images, labels, _ = dataiter.next()
+	print("images")
+	print(images.shape)
+
+	# show images
+	imshow(torchvision.utils.make_grid(images))
+	# print labels
+	# print(' '.join(f'{classes[labels[j]]:5s}' for j in range(batch_size)))
+	
+	#half augmenters are used for GFN reward, the other half used for OOD testing
+	augmenters_train=[transforms.RandomRotation(degrees=(0,90)),
+				transforms.GaussianBlur(kernel_size=(5, 9), sigma=(0.1, 5)),
+				transforms.RandomAffine(degrees=(30, 70), translate=(0.1, 0.3))]
+
+	augmenters_test=[transforms.RandomRotation(degrees=(90, 180)),
+			transforms.RandomResizedCrop(size=(96, 96)),
+			transforms.RandomPerspective(distortion_scale=0.6, p=1.0)]
+		
+
+	#augmenter = transforms.RandomRotation(degrees=(0, 180))
+	for idx,augmenter in enumerate(augmenters_train):
+		#rotated_imgs = [rotater(orig_img) for _ in range(4)]
+		Augmented_imgs=[augmenter(images[j]).unsqueeze(0) for j in range(30)]
+		Augmented_imgs=torch.cat(Augmented_imgs,0)
+
+		img=torchvision.utils.make_grid(Augmented_imgs)
+		img = img / 2 + 0.5     # unnormalize
+		npimg = img.numpy()
+		plt.imshow(np.transpose(npimg, (1, 2, 0)))
+		plt.savefig('images/AugmentedCamelyon17_'+str(idx)+'.png')
 
 
 
@@ -383,19 +462,22 @@ class MLPClassifier:
 		
 		######Faster version of GFN
 		elif self.model_type=="MLP_GFFN":#GFFN means faster version of the GFN
+			output_dim = 10
+			if args.Data == "camelyon17":
+				output_dim = 2
 			self.model =MLPClassifierWithMaskGenerator(in_dim=image_size[0]*image_size[1]*image_size[2],
-											            out_dim=10,
-											            hidden=(N_units,N_units,N_units,N_units),
-											            activation=nn.LeakyReLU,
-											            dropout_rate=droprates,
-											            mg_type='gfn',
-											            lr=1e-3,
-											            z_lr=1e-1,
-											            mg_lr=1e-3,
-											            mg_hidden=None,
-											            mg_activation=nn.LeakyReLU,
-											            beta=1,
-											            device=device,)
+														out_dim=output_dim,
+														hidden=(N_units,N_units,N_units,N_units),
+														activation=nn.LeakyReLU,
+														dropout_rate=droprates,
+														mg_type='gfn',
+														lr=1e-3,
+														z_lr=1e-1,
+														mg_lr=1e-3,
+														mg_hidden=None,
+														mg_activation=nn.LeakyReLU,
+														beta=1,
+														device=device,)
 
 
 		elif self.model_type=="MLP_dropoutAll":
@@ -431,18 +513,18 @@ class MLPClassifier:
 		elif self.model_type=="RESNET_GFFN":#GFFN means faster version of the GFN
 			self.model =Resenet_GFFN(image_size=image_size,
 														in_dim=N_units,
-											            out_dim=10,
-											            hidden=(N_units,N_units,N_units,N_units),
-											            activation=nn.LeakyReLU,
-											            dropout_rate=droprates,
-											            mg_type='gfn',
-											            lr=1e-3,
-											            z_lr=1e-1,
-											            mg_lr=1e-3,
-											            mg_hidden=None,
-											            mg_activation=nn.LeakyReLU,
-											            beta=1,
-											            device=device,)
+														out_dim=10,
+														hidden=(N_units,N_units,N_units,N_units),
+														activation=nn.LeakyReLU,
+														dropout_rate=droprates,
+														mg_type='gfn',
+														lr=1e-3,
+														z_lr=1e-1,
+														mg_lr=1e-3,
+														mg_hidden=None,
+														mg_activation=nn.LeakyReLU,
+														beta=1,
+														device=device,)
 
 
 		elif self.model_type=="RESNET_dropoutAll":
@@ -489,11 +571,11 @@ class MLPClassifier:
 
 
 	def fit(self,verbose=True):
-		# Training, make sure it's on GPU, otherwise, very slow...
-
+		if args.Data == "camelyon17": x_valid, y_valid, _ = iter(validloader).next()
+		else:x_valid, y_valid = iter(validloader).next()
 
 		####pick early stop, train mask etc.
-		x_valid, y_valid = iter(validloader).next()
+		# x_valid, y_valid = iter(validloader).next()
 		x_valid, y_valid = x_valid.to(device),y_valid.to(device)
 
 		##augment x_valid once and use it for all epoch/step ( for reward type 2)
@@ -508,9 +590,13 @@ class MLPClassifier:
 				x_valid_augmented.append(x_valid[idx,:].unsqueeze(0))
 		x_valid_augmented=torch.cat(x_valid_augmented,0)
 
+		if args.Data == "camelyon17":
+			x_test, y_test, _ = iter(testloader).next()
+		else:
+			x_test, y_test = iter(testloader).next()
 
 		###Do not use test data to train mask or tune hyperparameter, it is cheating
-		x_test, y_test = iter(testloader).next()
+		# x_test, y_test = iter(testloader).next()
 		x_test,y_test = x_test.to(device),y_test.to(device)
 
 
@@ -525,8 +611,12 @@ class MLPClassifier:
 			
 			running_loss = 0
 			for i, data in enumerate(trainloader, 0):
-		 
-				inputs_, labels_ = data
+				if args.Data == "camelyon17":
+					inputs_, labels_, _ = data
+				else:
+					inputs_, labels_ = data
+
+				# inputs_, labels_ = data
 			
 				inputs, labels = Variable(inputs_).to(device), Variable(labels_).to(device)
 				self.optimizer.zero_grad()
@@ -537,8 +627,8 @@ class MLPClassifier:
 					for idx, augmenter in enumerate(augmenters):
 						if idx>=(len(augmenters)//2):
 							augmented_inputs.append(augmenter(inputs_.detach().clone()).to(device))
-				   	
-			   	###forward
+					
+				###forward
 				if  "GFNFM" in self.model_type:
 					
 					self.GFN_operation.reset()
@@ -820,6 +910,9 @@ elif args.Data=="CIFAR10":
 elif args.Data=="SVHN":
 	#Input_size=3*32*32
 	image_size=(3,32,32)
+elif args.Data=="camelyon17":
+	#Input_size=3*32*32
+	image_size=(3,96,96)
 
 mlp1 = [MLPClassifier(droprates=args.p,image_size=image_size,max_epoch=args.Epochs,model_type=args.Method,N_units=args.Hidden_dim)]
 

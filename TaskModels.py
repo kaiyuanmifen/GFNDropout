@@ -299,14 +299,170 @@ class CNN_MaskedDropout(nn.Module):
         return x
 
 
+class CNN_GFFN(nn.Module):
+    def __init__(
+            self,
+            image_size,
+            in_dim=784,
+            out_dim=10,
+            hidden=None,
+            activation=nn.LeakyReLU,
+            dropout_rate=0.5,
+            mg_type='random',
+            lr=1e-3,
+            z_lr=1e-1,
+            mg_lr=1e-3,
+            mg_hidden=None,
+            mg_activation=nn.LeakyReLU,
+            beta=0.1,
+            device='cpu',
+    ):
+        super().__init__()
+        self.image_size=image_size
+        self.cnn = CNN(image_size)
+        self.model = CNN_MaskedDropout(image_size).to(device)
+        self.optimizer = optim.Adam(list(self.model.parameters())+list(self.resnet18.parameters()), lr=lr)
+        self.mg_type = mg_type
+        if mg_type == 'random':
+            self.mask_generators = construct_random_mask_generators(
+                model=self.model,
+                dropout_rate=dropout_rate
+            ).to(device)
+        elif mg_type == 'gfn':
+            self.rand_mask_generators = construct_random_mask_generators(
+                model=self.model,
+                dropout_rate=dropout_rate
+            ).to(device)
+            self.mask_generators = construct_cnn_mask_generators(
+                model=self.model,
+                dropout_rate=dropout_rate,
+                hidden=mg_hidden,
+                activation=mg_activation,
+            ).to(device)
+            
+            self.total_flowestimator = MLP_GFFN(in_dim=in_dim,out_dim=1,
+                                    activation=mg_activation).to(device)
+            MaskGeneratorParameters=[]
+            for generator in self.mask_generators:
+                MaskGeneratorParameters+=list(generator.parameters())
+           
+            param_list = [{'params': MaskGeneratorParameters, 'lr': mg_lr},
+                         {'params': self.total_flowestimator.parameters(), 'lr': z_lr}]
+            self.mg_optimizer = optim.Adam(param_list)
+        else:
+            raise ValueError('unknown mask generator type {}'.format(mg_type))
+        self.beta = beta
+
+    def step(self, x, y):
+        x=x.reshape(x.shape[0],self.image_size[0],self.image_size[1],self.image_size[2])
+        x=self.cnn(x)
+        metric = {}
+        logits, masks = self.model(x, self.mask_generators)
+        self.optimizer.zero_grad()
+        loss = nn.CrossEntropyLoss()(logits, y)
+        acc = (torch.argmax(logits, dim=1) == y).sum().item() / len(y)
+        metric['loss'] = loss.item()
+        metric['acc'] = acc
+        loss.backward()
+        self.optimizer.step()
+        return logits,metric
+
+    def _gfn_step(self, x_mask, y_mask,x_reward,y_reward):
+        x_mask= x_mask.reshape(x_mask.shape[0],self.image_size[0],self.image_size[1],self.image_size[2])
+        x_reward= x_reward.reshape(x_reward.shape[0],self.image_size[0],self.image_size[1],self.image_size[2])
+        x_mask=self.cnn(x_mask)
+        x_reward=self.cnn(x_reward)
+        metric = {}
+        _, masks = self.model(x_mask, self.mask_generators)
+        logits, _ = self.model.forward_predifinedMask(x_reward, masks)
+        with torch.no_grad():
+            losses = nn.CrossEntropyLoss(reduce=False)(logits, y_reward)
+            log_rewards = - self.beta * losses
+            logZ=self.total_flowestimator(x_mask)
+        log_probs_F = []
+        log_probs_B = []
+        for m, mg_f, mg_b in zip(masks, self.mask_generators, self.rand_mask_generators):
+            log_probs_F.append(mg_f.log_prob(m, m).unsqueeze(1))
+            log_probs_B.append(mg_b.log_prob(m, m).unsqueeze(1))
+        tb_loss = ((logZ - log_rewards
+                    + torch.cat(log_probs_F, dim=1).sum(dim=1)
+                    - torch.cat(log_probs_B, dim=1).sum(dim=1)) ** 2).mean()
+        metric['tb_loss'] = tb_loss.item()
+        self.mg_optimizer.zero_grad()
+        tb_loss.backward()
+        self.mg_optimizer.step()
+        return metric
+
+    def test(self, x, y):
+        x=x.reshape(x.shape[0],self.image_size[0],self.image_size[1],self.image_size[2])
+        x=self.cnn(x)
+        metric = {}
+        logits, masks = self.model(x, self.mask_generators)
+        loss = nn.CrossEntropyLoss()(logits, y)
+        acc = (torch.argmax(logits, dim=1) == y).sum().item() / len(y)
+        metric['loss'] = loss.item()
+        metric['acc'] = acc
+        return metric
+
+    def forward(self,x):
+        x=x.reshape(x.shape[0],self.image_size[0],self.image_size[1],self.image_size[2])
+        x=self.cnn(x)
+        logits, masks = self.model(x, self.mask_generators)
+        return logits
+
+
+class CNNMaskGenerator(nn.Module):
+    def __init__(self, num_unit, dropout_rate, hidden=None, activation=nn.LeakyReLU):
+        super().__init__()
+        self.num_unit = torch.tensor(num_unit).type(torch.float32)
+        self.dropout_rate = torch.tensor(dropout_rate).type(torch.float32)
+        self.mlp = CNN_GFFN(
+            in_dim=num_unit,
+            out_dim=num_unit,
+            hidden=hidden,
+            activation=activation,
+        )
+
+    def _dist(self, x):
+        x = self.mlp(x)
+        x = torch.sigmoid(x)
+        dist = (1. - self.dropout_rate) * self.num_unit * x / (x.sum(1).unsqueeze(1) + 1e-6)
+        dist = dist.clamp(0, 1)
+        return dist
+
+    def forward(self, x):
+        return torch.bernoulli(self._dist(x))
+
+    def log_prob(self, x, m):
+        dist = self._dist(x)
+        probs = dist * m + (1. - dist) * (1. - m)
+        return torch.log(probs).sum(1)
+
+def construct_cnn_mask_generators(
+        model,
+        dropout_rate,
+        hidden=None,
+        activation=nn.LeakyReLU
+):
+    mask_generators = nn.ModuleList()
+    for layer in model.fc:
+        mask_generators.append(
+            CNNMaskGenerator(
+                num_unit=layer.weight.shape[0],
+                dropout_rate=dropout_rate,
+                hidden=hidden,
+                activation=activation
+            )
+        )
+
+    return mask_generators
+
 class CNN_Standout(nn.Module):
     def __init__(self,image_size,hidden_size=10,droprates=0):
         super(CNN_Standout, self).__init__()
         self.conv1 = nn.Conv2d(image_size[0], 32, kernel_size=5)
         self.conv2 = nn.Conv2d(32, 32, kernel_size=5)
         self.conv3 = nn.Conv2d(32,64, kernel_size=5)
-
-
 
         self.image_size=image_size
         if self.image_size[1]==28:
@@ -387,10 +543,6 @@ class CNN_SVD(nn.Module):
         return x
 
 
-
-
-
-
 ################GFFN (faster version)
 
 class MLP_GFFN(nn.Module):
@@ -399,7 +551,8 @@ class MLP_GFFN(nn.Module):
         if hidden is None:
             hidden = [32, 32]
 
-        self.LN=nn.LayerNorm(in_dim)##normalize the input to prevent exploding
+        self.LN=nn.LayerNorm(in_dim) ##normalize the input to prevent exploding
+        self.LN2=nn.LayerNorm(out_dim)
         h_old = in_dim
         self.fc = nn.ModuleList()
         for h in hidden:
@@ -429,13 +582,15 @@ class MLPMaskedDropout(nn.Module):
             h_old = h
         self.out_layer = nn.Linear(h_old, out_dim)
         self.activation = activation
+        self.LN = nn.LayerNorm(in_dim)
 
     def forward(self, x, mask_generators):
+        # normalize x
+        # x = self.LN(x)
         masks = []
         for layer, mg in zip(self.fc, mask_generators):
             x = self.activation()(layer(x))
             # generate mask & dropout
-
             m = mg(x).detach()
             masks.append(m)
             multipliers = m.shape[1] / (m.sum(1) + 1e-6)
@@ -491,8 +646,6 @@ class MLPMaskGenerator(nn.Module):
         return dist
 
     def forward(self, x):
-        
-     
         return torch.bernoulli(self._dist(x))
 
     def log_prob(self, x, m):
@@ -609,11 +762,14 @@ class MLPClassifierWithMaskGenerator(nn.Module):
         self.beta = beta
 
     def step(self, x, y):
+        # normalize the inputs
         metric = {}
         logits, masks = self.model(x, self.mask_generators)
         # Update model
         self.optimizer.zero_grad()
         loss = nn.CrossEntropyLoss()(logits, y)
+        # print('preds', torch.unique(torch.argmax(logits, dim=1)))
+        # print('real', torch.unique(y))
         acc = (torch.argmax(logits, dim=1) == y).sum().item() / len(y)
         metric['loss'] = loss.item()
         metric['acc'] = acc
