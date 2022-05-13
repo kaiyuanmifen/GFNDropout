@@ -465,7 +465,7 @@ class MLPClassifier:
 			output_dim = 10
 			if args.Data == "camelyon17":
 				output_dim = 2
-			self.model =MLPClassifierWithMaskGenerator(in_dim=image_size[0]*image_size[1]*image_size[2],
+			self.model = MLPClassifierWithMaskGenerator(in_dim=image_size[0]*image_size[1]*image_size[2],
 														out_dim=output_dim,
 														hidden=(N_units,N_units,N_units,N_units),
 														activation=nn.LeakyReLU,
@@ -479,6 +479,21 @@ class MLPClassifier:
 														beta=1,
 														device=device,)
 
+		elif self.model_type == "CNN_GFFN":
+			output_dim = 10 if args.Data != "camelyon17" else 2
+			self.model = MLPClassifierWithMaskGenerator(in_dim=image_size[0]*image_size[1]*image_size[2],
+														out_dim=output_dim,
+														hidden=(N_units,N_units,N_units,N_units),
+														activation=nn.LeakyReLU,
+														dropout_rate=droprates,
+														mg_type='gfn',
+														lr=1e-3,
+														z_lr=1e-1,
+														mg_lr=1e-3,
+														mg_hidden=None,
+														mg_activation=nn.LeakyReLU,
+														beta=1,
+														device=device, from_cnn=True)
 
 		elif self.model_type=="MLP_dropoutAll":
 			#dropour on all layers

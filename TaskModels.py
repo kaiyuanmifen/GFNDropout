@@ -247,12 +247,12 @@ class CNN(nn.Module):
         x = self.fc2(x)
         return x
 
-class CNN_MaskedDropout(nn.Module):
+class CNN_GFFN(nn.Module):
     def __init__(self,image_size,hidden_size=10,droprates=0):
-        super(CNN_MaskedDropout, self).__init__()
+        super().__init__()
         self.conv1 = nn.Conv2d(image_size[0], 32, kernel_size=5)
         self.conv2 = nn.Conv2d(32, 32, kernel_size=5)
-        self.conv3 = nn.Conv2d(32,64, kernel_size=5)
+        self.conv3 = nn.Conv2d(32, 64, kernel_size=5)
 
         self.image_size=image_size
         if self.image_size[1]==28:
@@ -260,202 +260,20 @@ class CNN_MaskedDropout(nn.Module):
         elif self.image_size[1]==32:
             self.CNNoutputsize=4*4*64
 
+
         self.fc1 = nn.Linear(self.CNNoutputsize, hidden_size)
         self.fc2 = nn.Linear(hidden_size, 10)
-
         self.droprates=droprates
+        self.DIY_Dropout=DIY_Dropout(droprates)
 
-        self.Mask_Dropout=Mask_Dropout()###make it part of the model so it gets the train/eval state
-
-
-    def forward(self, x,mask):
-
-        #x=F.dropout(x, p=self.droprates[0], training=self.training)
-        x = F.relu(self.conv1(x))
-        #x = F.dropout(x, p=0.5, training=self.training)
-        x = F.relu(F.max_pool2d(self.conv2(x), 2))
-        #x = F.dropout(x, p=self.droprates[1], training=self.training)
-        x = F.relu(F.max_pool2d(self.conv3(x),2))
-        #x = F.dropout(x, p=self.droprates[1], training=self.training)
-        x = x.view(-1,self.CNNoutputsize)
-        x = F.relu(self.fc1(x))
-        x=self.Mask_Dropout(x,mask)
-        #x = F.dropout(x, p=self.droprates[1],training=self.training)
-        x = self.fc2(x)
-        return x
-
-    def Get_condition(self, x):
-
-        #x=F.dropout(x, p=self.droprates[0], training=self.training)
-        x = F.relu(self.conv1(x))
-        #x = F.dropout(x, p=0.5, training=self.training)
-        x = F.relu(F.max_pool2d(self.conv2(x), 2))
-        #x = F.dropout(x, p=self.droprates[1], training=self.training)
-        x = F.relu(F.max_pool2d(self.conv3(x),2))
-        #x = F.dropout(x, p=self.droprates[1], training=self.training)
-        x = x.view(-1,self.CNNoutputsize)
-        x = F.relu(self.fc1(x))
-     
-        return x
-
-
-class CNN_GFFN(nn.Module):
-    def __init__(
-            self,
-            image_size,
-            in_dim=784,
-            out_dim=10,
-            hidden=None,
-            activation=nn.LeakyReLU,
-            dropout_rate=0.5,
-            mg_type='random',
-            lr=1e-3,
-            z_lr=1e-1,
-            mg_lr=1e-3,
-            mg_hidden=None,
-            mg_activation=nn.LeakyReLU,
-            beta=0.1,
-            device='cpu',
-    ):
-        super().__init__()
-        self.image_size=image_size
-        self.cnn = CNN(image_size)
-        self.model = CNN_MaskedDropout(image_size).to(device)
-        self.optimizer = optim.Adam(list(self.model.parameters())+list(self.resnet18.parameters()), lr=lr)
-        self.mg_type = mg_type
-        if mg_type == 'random':
-            self.mask_generators = construct_random_mask_generators(
-                model=self.model,
-                dropout_rate=dropout_rate
-            ).to(device)
-        elif mg_type == 'gfn':
-            self.rand_mask_generators = construct_random_mask_generators(
-                model=self.model,
-                dropout_rate=dropout_rate
-            ).to(device)
-            self.mask_generators = construct_cnn_mask_generators(
-                model=self.model,
-                dropout_rate=dropout_rate,
-                hidden=mg_hidden,
-                activation=mg_activation,
-            ).to(device)
-            
-            self.total_flowestimator = MLP_GFFN(in_dim=in_dim,out_dim=1,
-                                    activation=mg_activation).to(device)
-            MaskGeneratorParameters=[]
-            for generator in self.mask_generators:
-                MaskGeneratorParameters+=list(generator.parameters())
-           
-            param_list = [{'params': MaskGeneratorParameters, 'lr': mg_lr},
-                         {'params': self.total_flowestimator.parameters(), 'lr': z_lr}]
-            self.mg_optimizer = optim.Adam(param_list)
-        else:
-            raise ValueError('unknown mask generator type {}'.format(mg_type))
-        self.beta = beta
-
-    def step(self, x, y):
-        x=x.reshape(x.shape[0],self.image_size[0],self.image_size[1],self.image_size[2])
-        x=self.cnn(x)
-        metric = {}
-        logits, masks = self.model(x, self.mask_generators)
-        self.optimizer.zero_grad()
-        loss = nn.CrossEntropyLoss()(logits, y)
-        acc = (torch.argmax(logits, dim=1) == y).sum().item() / len(y)
-        metric['loss'] = loss.item()
-        metric['acc'] = acc
-        loss.backward()
-        self.optimizer.step()
-        return logits,metric
-
-    def _gfn_step(self, x_mask, y_mask,x_reward,y_reward):
-        x_mask= x_mask.reshape(x_mask.shape[0],self.image_size[0],self.image_size[1],self.image_size[2])
-        x_reward= x_reward.reshape(x_reward.shape[0],self.image_size[0],self.image_size[1],self.image_size[2])
-        x_mask=self.cnn(x_mask)
-        x_reward=self.cnn(x_reward)
-        metric = {}
-        _, masks = self.model(x_mask, self.mask_generators)
-        logits, _ = self.model.forward_predifinedMask(x_reward, masks)
-        with torch.no_grad():
-            losses = nn.CrossEntropyLoss(reduce=False)(logits, y_reward)
-            log_rewards = - self.beta * losses
-            logZ=self.total_flowestimator(x_mask)
-        log_probs_F = []
-        log_probs_B = []
-        for m, mg_f, mg_b in zip(masks, self.mask_generators, self.rand_mask_generators):
-            log_probs_F.append(mg_f.log_prob(m, m).unsqueeze(1))
-            log_probs_B.append(mg_b.log_prob(m, m).unsqueeze(1))
-        tb_loss = ((logZ - log_rewards
-                    + torch.cat(log_probs_F, dim=1).sum(dim=1)
-                    - torch.cat(log_probs_B, dim=1).sum(dim=1)) ** 2).mean()
-        metric['tb_loss'] = tb_loss.item()
-        self.mg_optimizer.zero_grad()
-        tb_loss.backward()
-        self.mg_optimizer.step()
-        return metric
-
-    def test(self, x, y):
-        x=x.reshape(x.shape[0],self.image_size[0],self.image_size[1],self.image_size[2])
-        x=self.cnn(x)
-        metric = {}
-        logits, masks = self.model(x, self.mask_generators)
-        loss = nn.CrossEntropyLoss()(logits, y)
-        acc = (torch.argmax(logits, dim=1) == y).sum().item() / len(y)
-        metric['loss'] = loss.item()
-        metric['acc'] = acc
-        return metric
-
-    def forward(self,x):
-        x=x.reshape(x.shape[0],self.image_size[0],self.image_size[1],self.image_size[2])
-        x=self.cnn(x)
-        logits, masks = self.model(x, self.mask_generators)
-        return logits
-
-
-class CNNMaskGenerator(nn.Module):
-    def __init__(self, num_unit, dropout_rate, hidden=None, activation=nn.LeakyReLU):
-        super().__init__()
-        self.num_unit = torch.tensor(num_unit).type(torch.float32)
-        self.dropout_rate = torch.tensor(dropout_rate).type(torch.float32)
-        self.mlp = CNN_GFFN(
-            in_dim=num_unit,
-            out_dim=num_unit,
-            hidden=hidden,
-            activation=activation,
-        )
-
-    def _dist(self, x):
-        x = self.mlp(x)
-        x = torch.sigmoid(x)
-        dist = (1. - self.dropout_rate) * self.num_unit * x / (x.sum(1).unsqueeze(1) + 1e-6)
-        dist = dist.clamp(0, 1)
-        return dist
 
     def forward(self, x):
-        return torch.bernoulli(self._dist(x))
+        x = F.relu(self.conv1(x))
+        x = F.relu(F.max_pool2d(self.conv2(x), 2))
+        x = F.relu(F.max_pool2d(self.conv3(x), 2))
+        x = x.view(-1,self.CNNoutputsize)
+        return x
 
-    def log_prob(self, x, m):
-        dist = self._dist(x)
-        probs = dist * m + (1. - dist) * (1. - m)
-        return torch.log(probs).sum(1)
-
-def construct_cnn_mask_generators(
-        model,
-        dropout_rate,
-        hidden=None,
-        activation=nn.LeakyReLU
-):
-    mask_generators = nn.ModuleList()
-    for layer in model.fc:
-        mask_generators.append(
-            CNNMaskGenerator(
-                num_unit=layer.weight.shape[0],
-                dropout_rate=dropout_rate,
-                hidden=hidden,
-                activation=activation
-            )
-        )
-
-    return mask_generators
 
 class CNN_Standout(nn.Module):
     def __init__(self,image_size,hidden_size=10,droprates=0):
@@ -527,7 +345,6 @@ class CNN_SVD(nn.Module):
 
 
     def forward(self, x):
-
         #x=F.dropout(x, p=self.droprates[0], training=self.training)
         x = F.relu(self.conv1(x))
         #x = F.dropout(x, p=0.5, training=self.training)
@@ -536,7 +353,7 @@ class CNN_SVD(nn.Module):
         x = F.relu(F.max_pool2d(self.conv3(x),2))
         #x = F.dropout(x, p=self.droprates[1], training=self.training)
 
-        x = x.view(-1,self.CNNoutputsize )
+        x = x.view(-1,self.CNNoutputsize)
         x = F.relu(self.fc1(x))
         #x = F.dropout(x, p=self.droprates[1],training=self.training)
         x = self.fc2(x)
@@ -546,7 +363,7 @@ class CNN_SVD(nn.Module):
 ################GFFN (faster version)
 
 class MLP_GFFN(nn.Module):
-    def __init__(self, in_dim=784, out_dim=10, hidden=None, activation=nn.LeakyReLU):
+    def __init__(self, in_dim=784, out_dim=10, hidden=None, activation=nn.LeakyReLU, from_cnn=False):
         super().__init__()
         if hidden is None:
             hidden = [32, 32]
@@ -560,12 +377,20 @@ class MLP_GFFN(nn.Module):
             h_old = h
         self.out_layer = nn.Linear(h_old, out_dim)
         self.activation = activation
+        self.cnn = CNN_GFFN(image_size = (3, 32, 32))
+        self.from_cnn = from_cnn
 
     def forward(self, x):
-        x=self.LN(x)
-        for layer in self.fc:
-            x = self.activation()(layer(x))
-        x = self.out_layer(x)
+        if self.from_cnn:
+            x = x.reshape(x.shape[0], 3, 32, 32) # x is actually (BS, image_size[0]*image_size[1]*image_size[2])
+            x = self.cnn(x) # format (bs, 10)
+            print('In CNN', x.size())
+        else:        
+            x=self.LN(x)
+            for layer in self.fc:
+                x = self.activation()(layer(x))
+            x = self.out_layer(x)
+            print('Using MLP', x.size())
         return x
 
 
@@ -603,7 +428,6 @@ class MLPMaskedDropout(nn.Module):
         masks = []
         for layer, m in zip(self.fc, mask):
             x = self.activation()(layer(x))
-            
             masks.append(m)
             multipliers = m.shape[1] / (m.sum(1) + 1e-6)
             x = torch.mul((x * m).T, multipliers).T
@@ -626,7 +450,7 @@ class RandomMaskGenerator(nn.Module):
 
 
 class MLPMaskGenerator(nn.Module):
-    def __init__(self, num_unit, dropout_rate, hidden=None, activation=nn.LeakyReLU):
+    def __init__(self, num_unit, dropout_rate, hidden=None, activation=nn.LeakyReLU, from_cnn=False):
         super().__init__()
         self.num_unit = torch.tensor(num_unit).type(torch.float32)
         self.dropout_rate = torch.tensor(dropout_rate).type(torch.float32)
@@ -635,6 +459,7 @@ class MLPMaskGenerator(nn.Module):
             out_dim=num_unit,
             hidden=hidden,
             activation=activation,
+            from_cnn=False,
         )
 
     def _dist(self, x):
@@ -673,7 +498,8 @@ def construct_mlp_mask_generators(
         model,
         dropout_rate,
         hidden=None,
-        activation=nn.LeakyReLU
+        activation=nn.LeakyReLU,
+        from_cnn = False,
 ):
     mask_generators = nn.ModuleList()
     for layer in model.fc:
@@ -682,7 +508,8 @@ def construct_mlp_mask_generators(
                 num_unit=layer.weight.shape[0],
                 dropout_rate=dropout_rate,
                 hidden=hidden,
-                activation=activation
+                activation=activation,
+                from_cnn = from_cnn,
             )
         )
 
@@ -705,6 +532,7 @@ class MLPClassifierWithMaskGenerator(nn.Module):
             mg_activation=nn.LeakyReLU,
             beta=0.1,
             device='cpu',
+            from_cnn=False,
     ):
         super().__init__()
         # classifier
@@ -734,13 +562,14 @@ class MLPClassifierWithMaskGenerator(nn.Module):
                 dropout_rate=dropout_rate,
                 hidden=mg_hidden,
                 activation=mg_activation,
+                from_cnn=from_cnn,
             ).to(device)
             
             ####total flow (logZ) should condition on input or previous layoutout
             #self.logZ = nn.Parameter(torch.tensor(0.)).to(device)
             
             self.total_flowestimator = MLP_GFFN(in_dim=in_dim,out_dim=1,
-                                    activation=mg_activation).to(device)
+                                    activation=mg_activation, from_cnn=from_cnn).to(device)
             
                         
             #param_list = [{'params': self.model.parameters(), 'lr': mg_lr},
@@ -760,6 +589,7 @@ class MLPClassifierWithMaskGenerator(nn.Module):
 
         # gfn parameters
         self.beta = beta
+        self.from_cnn = from_cnn
 
     def step(self, x, y):
         # normalize the inputs
@@ -814,7 +644,6 @@ class MLPClassifierWithMaskGenerator(nn.Module):
         self.mg_optimizer.zero_grad()
         tb_loss.backward()
         self.mg_optimizer.step()
-
         return metric
 
     def test(self, x, y):
@@ -824,13 +653,13 @@ class MLPClassifierWithMaskGenerator(nn.Module):
         acc = (torch.argmax(logits, dim=1) == y).sum().item() / len(y)
         metric['loss'] = loss.item()
         metric['acc'] = acc
-
         return metric
 
     def forward(self,x):
         logits, masks = self.model(x, self.mask_generators)
-
         return logits
+
+
 
 
 ########baselines for GFFN 
