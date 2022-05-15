@@ -194,7 +194,7 @@ if args.Data=="CIFAR10":
 	indices = torch.randperm(len(trainset))[:int(len(trainset)*args.DataRatio)]
 	#indices = torch.randperm(len(trainset))
 
-	validset =torch.utils.data.Subset(trainset, indices[int(0.7*len(indices)):(int(1*len(indices))-1)])
+	validset =torch.utils.data.Subset(trainset, indices[int(0.7*len(indices)):(int(1*len(indices)))])
 	
 	trainset =torch.utils.data.Subset(trainset, indices[:int(0.7*len(indices))])
 	#indices = torch.randperm(len(testset))[:300]
@@ -205,10 +205,7 @@ if args.Data=="CIFAR10":
 	trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
 											  shuffle=True)
 
-
 	validloader = torch.utils.data.DataLoader(validset, batch_size=len(validset), shuffle=False)
-		
-
 
 	testloader = torch.utils.data.DataLoader(testset, batch_size=len(testset),
 											 shuffle=False, num_workers=2)
@@ -481,9 +478,9 @@ class MLPClassifier:
 
 		elif self.model_type == "CNN_GFFN":
 			output_dim = 10 if args.Data != "camelyon17" else 2
-			self.model = MLPClassifierWithMaskGenerator(in_dim=image_size[0]*image_size[1]*image_size[2],
+			self.model = CNNClassifierWithMaskGenerator(in_dim=image_size[0]*image_size[1]*image_size[2],
 														out_dim=output_dim,
-														hidden=(N_units,N_units,N_units,N_units),
+														hidden=[(3, 32), (32, 32), (32, 64)],
 														activation=nn.LeakyReLU,
 														dropout_rate=droprates,
 														mg_type='gfn',
@@ -493,7 +490,7 @@ class MLPClassifier:
 														mg_hidden=None,
 														mg_activation=nn.LeakyReLU,
 														beta=1,
-														device=device, from_cnn=True)
+														device=device,)
 
 		elif self.model_type=="MLP_dropoutAll":
 			#dropour on all layers
