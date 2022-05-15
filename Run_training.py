@@ -103,7 +103,7 @@ if args.Data=="MNIST":
 	indices = torch.randperm(len(trainset))[:int(len(trainset)*args.DataRatio)]
 	#indices = torch.randperm(len(trainset))
 
-	validset =torch.utils.data.Subset(trainset, indices[int(0.7*len(indices)):(int(1*len(indices))-1)])
+	validset =torch.utils.data.Subset(trainset, indices[int(0.7*len(indices)):(int(1*len(indices)))])
 	
 	trainset =torch.utils.data.Subset(trainset, indices[:int(0.7*len(indices))])
 
@@ -279,7 +279,7 @@ if args.Data=="SVHN":
 
 	indices = torch.randperm(len(trainset))[:int(len(trainset)*args.DataRatio)]
 
-	validset =torch.utils.data.Subset(trainset, indices[int(0.7*len(indices)):(int(1*len(indices))-1)])
+	validset =torch.utils.data.Subset(trainset, indices[int(0.7*len(indices)):(int(1*len(indices)))])
 	
 	trainset =torch.utils.data.Subset(trainset, indices[:int(0.7*len(indices))])
 
