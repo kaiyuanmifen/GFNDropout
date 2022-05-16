@@ -365,10 +365,10 @@ class CNN_GFFN(nn.Module):
         
         x = F.relu(F.max_pool2d(self.conv2(x), 2))
         x = F.relu(F.max_pool2d(self.conv3(x), 2))
-        x = x.view(-1,self.CNNoutputsize)
+        x = x.view(-1, self.CNNoutputsize)
         for layer in self.fc:
             x = self.activation()(layer(x))
-        x = self.out_layer(F.relu(x))
+        x = self.out_layer(x)
         return x
 
 
@@ -382,7 +382,7 @@ class CNNMaskedDropout(nn.Module):
         self.CNNoutputsize = 4*4*64
 
         self.fc = nn.ModuleList()
-        self.fc.append(nn.Linear(self.CNNoutputsize, self.CNNoutputsize)) # hidden size =  128
+        self.fc.append(nn.Linear(self.CNNoutputsize, self.CNNoutputsize))
 
         self.out_layer = nn.Linear(self.CNNoutputsize, out_dim)
         self.activation = activation
@@ -437,11 +437,11 @@ class CNNMaskGenerator(nn.Module):
         original_shape = x.shape
         input_size = 1
         for shape in original_shape:
-            input_size *= shape
-        
+            input_size *= shape        
         last_axis = int(input_size/2048)
         x = x.reshape(128, 4, 4, last_axis)
         x = self.mlp(x)
+        x = torch.nan_to_num(x, nan=1e-6) # this is to prevent the code from crashing when the logits are nan
         x = torch.sigmoid(x)
         dist = (1. - self.dropout_rate) * self.num_unit * x / (x.sum(1).unsqueeze(1) + 1e-6)
         dist = dist.clamp(0, 1)
@@ -627,12 +627,8 @@ class MLPMaskedDropout(nn.Module):
             h_old = h
         self.out_layer = nn.Linear(h_old, out_dim)
         self.activation = activation
-        self.LN = nn.LayerNorm(in_dim)
-        self.LN2 = nn.LayerNorm(out_dim)
 
     def forward(self, x, mask_generators):
-        # normalize x
-        # x = self.LN(x)
         masks = []
         for layer, mg in zip(self.fc, mask_generators):
             x = self.activation()(layer(x))
@@ -683,7 +679,8 @@ class MLPMaskGenerator(nn.Module):
         )
 
     def _dist(self, x):
-        x = self.mlp(x) 
+        x = self.mlp(x)
+        x = torch.nan_to_num(x, nan=1e-6) # this is to prevent the code from crashing when the logits are nan
         x = torch.sigmoid(x)
         dist = (1. - self.dropout_rate) * self.num_unit * x / (x.sum(1).unsqueeze(1) + 1e-6)
         dist = dist.clamp(0, 1)
