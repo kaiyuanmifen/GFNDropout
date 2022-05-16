@@ -476,7 +476,7 @@ class MLPClassifier:
 														beta=1,
 														device=device,)
 
-		elif self.model_type == "CNN_GFFN":
+		elif self.model_type.lower() == "cnn_gffnchannel":
 			output_dim = 10 if args.Data != "camelyon17" else 2
 			self.model = CNNClassifierWithMaskGenerator(in_dim=image_size[0]*image_size[1]*image_size[2],
 														out_dim=output_dim,
@@ -491,6 +491,23 @@ class MLPClassifier:
 														mg_activation=nn.LeakyReLU,
 														beta=1,
 														device=device,)
+
+		elif self.model_type.lower() == "cnn_dropoutchannel":
+			output_dim = 10 if args.Data != "camelyon17" else 2
+			self.model = CNNClassifierWithMaskGenerator(in_dim=image_size[0]*image_size[1]*image_size[2],
+														out_dim=output_dim,
+														hidden=[(3, 32), (32, 32), (32, 64)],
+														activation=nn.LeakyReLU,
+														dropout_rate=droprates,
+														mg_type='random',
+														lr=1e-3,
+														z_lr=1e-1,
+														mg_lr=1e-3,
+														mg_hidden=None,
+														mg_activation=nn.LeakyReLU,
+														beta=1,
+														device=device,)
+
 
 		elif self.model_type=="MLP_dropoutAll":
 			#dropour on all layers
