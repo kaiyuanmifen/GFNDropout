@@ -570,6 +570,7 @@ class RandomMaskGenerator(nn.Module):
         super().__init__()
         self.dropout_rate = torch.tensor(dropout_rate).type(torch.float32)
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        #self.device = torch.device('cpu')
     def forward(self, x):
         return torch.bernoulli((1. - self.dropout_rate) * torch.ones(x.shape))
 
@@ -612,6 +613,7 @@ class MLPMaskGenerator(nn.Module):
 
     def _dist(self, x):
         x = self.mlp(x)
+        x = torch.nan_to_num(x, nan=1e-6) # this is to prevent the code from crashing when the logits are nan. Idea from Bonaventure Dossou 
         x = torch.sigmoid(x)
         dist = (1. - self.dropout_rate) * self.num_unit * x / (x.sum(1).unsqueeze(1) + 1e-6)
         dist = dist.clamp(0, 1)

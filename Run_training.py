@@ -1,4 +1,4 @@
-
+import time
 import torch
 import numpy as np
 import torch.optim as optim 
@@ -81,6 +81,7 @@ print("task:",Task_name)
 
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+#device = torch.device('cpu')
 
 
 ####part 1 load MNIST/CIFAR data
@@ -115,7 +116,7 @@ if args.Data=="MNIST":
 	print(len(testset))
 
 	# Visualize 10 image samples in MNIST dataset
-	trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=2)
+	trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=True)
 
 	validloader = torch.utils.data.DataLoader(validset, batch_size=batch_size, shuffle=False)
 		
@@ -212,7 +213,7 @@ if args.Data=="CIFAR10":
                         					shuffle=False)
 
 	testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
-											 shuffle=False, num_workers=2)
+											 shuffle=False)
 
 	print("training set length")
 	print(len(trainset))
@@ -242,7 +243,7 @@ if args.Data=="CIFAR10":
 	# show images
 	imshow(torchvision.utils.make_grid(images))
 	# print labels
-	print(' '.join(f'{classes[labels[j]]:5s}' for j in range(batch_size)))
+	# print(' '.join([f"{classes[labels[j]]:5s}" for j in range(batch_size)]))
 	
 	#half augmenters are used for GFN reward, the other half used for OOD testing
 	augmenters_train=[transforms.RandomRotation(degrees=(0,90)),
@@ -295,7 +296,7 @@ if args.Data=="SVHN":
 	testset  =torch.utils.data.Subset(testset, indices)
 	
 	trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
-											  shuffle=True, num_workers=2)
+											  shuffle=True)
 
 
 	validloader = torch.utils.data.DataLoader(validset, batch_size=batch_size, shuffle=False)
@@ -303,7 +304,7 @@ if args.Data=="SVHN":
 
 
 	testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
-											 shuffle=False, num_workers=2)
+											 shuffle=False)
 
 	print("training set length")
 	print(len(trainset))
@@ -369,7 +370,7 @@ class MLPClassifier:
 		self.model_type=model_type
 
 		self.num_channels = image_size[0]
-		self.num_resnet_layers = 101
+		self.num_resnet_layers = 18
 		if self.model_type=="MLP_nodropout":
 		  self.model = MLP(Input_size=image_size[0]*image_size[1]*image_size[2], hidden_size=N_units,droprates=0)
 		
@@ -566,7 +567,7 @@ class MLPClassifier:
 
 					elif args.RewardType==2:
 						##build mask using validation set but get reward from different augmentation of the validation set
-
+						start_time = time.time()
 						G_metric={}
 						G_metric_batch_losses = []
 						####pick early stop, train mask etc.
@@ -584,14 +585,20 @@ class MLPClassifier:
 								else:
 									x_valid_augmented.append(x_valid[idx,:].unsqueeze(0))
 							x_valid_augmented=torch.cat(x_valid_augmented,0)
+							#import pdb;pdb.set_trace()
 							G_metric_batch = self.model._gfn_step(x_mask=x_valid, y_mask=y_valid ,x_reward=x_valid_augmented, y_reward=y_valid)
 							G_metric_batch_losses.append(G_metric_batch['tb_loss'])
 						G_metric['tb_loss'] = np.mean(G_metric_batch_losses)
+						#import pdb;pdb.set_trace()
 						
+
 										
 
 				else:
 					outputs = self.model(inputs)
+
+				end_time = time.time()
+
 
 				if "GFFN" not in self.model_type:
 					loss = self.criterion(outputs, labels)
