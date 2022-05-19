@@ -1,3 +1,6 @@
+import time
+import torch
+import numpy as np
 import torch.optim as optim 
 from GFN_SampleMask import GFN_SamplingMask
 from cifar10c import CIFAR_1O_Corrupted
@@ -5,8 +8,10 @@ from GFNFunctions import *
 from Dropout_DIY import *
 from TaskModels import *
 import os
+
 import matplotlib.pyplot as plt
 import matplotlib
+
 import torch
 import torchvision
 from torchvision import datasets
@@ -15,10 +20,13 @@ from torch.autograd import Variable
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+from torch.utils.data.sampler import SubsetRandomSampler
 import random
+
 import numpy as np
 import pandas as pd
 import h5py
+from scipy.ndimage.interpolation import rotate
 import argparse
 matplotlib.use('AGG')
 
@@ -73,10 +81,11 @@ print("task:",Task_name)
 
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+#device = torch.device('cpu')
 
 
 ####part 1 load MNIST/CIFAR data
-batch_size=512
+batch_size=128
 if args.Data=="MNIST":
 	image_size_use = (224,224)
 	mnist = datasets.MNIST(download=False, train=True, root="data/").data.float()
@@ -107,12 +116,12 @@ if args.Data=="MNIST":
 	print(len(testset))
 
 	# Visualize 10 image samples in MNIST dataset
-	trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=True,num_workers=2)
+	trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=True)
 
-	validloader = torch.utils.data.DataLoader(validset, batch_size=batch_size, shuffle=False,num_workers=2)
+	validloader = torch.utils.data.DataLoader(validset, batch_size=batch_size, shuffle=False)
 		
 
-	testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size, shuffle=False,num_workers=2)
+	testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size, shuffle=False)
 	
 
 	dataiter = iter(trainloader)
@@ -177,11 +186,9 @@ if args.Data=="CIFAR10":
 	testset = torchvision.datasets.CIFAR10(root='data', train=False,
 										   download=True, transform=transform)
 	
-	#indices = torch.randperm(len(trainset))[:100]
+	#indices = torch.randperm(len(trainset))[:1000]
 	#indices = torch.randperm(len(trainset))
-	
 	indices = torch.randperm(len(trainset))[:int(len(trainset)*args.DataRatio)]
-	
 	#indices = torch.randperm(len(trainset))
 
 	validset =torch.utils.data.Subset(trainset, indices[int(0.7*len(indices)):(int(1*len(indices))-1)])
@@ -193,16 +200,16 @@ if args.Data=="CIFAR10":
 	testset  =torch.utils.data.Subset(testset, indices)
 	
 	trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
-											  shuffle=True,num_workers=2,pin_memory=True)
+											  shuffle=True)
 
 
-	validloader = torch.utils.data.DataLoader(validset, batch_size=batch_size, shuffle=False,num_workers=2,pin_memory=True)
+	validloader = torch.utils.data.DataLoader(validset, batch_size=batch_size, shuffle=False)
 		
 
 	# Also use CIFAR 10 C for testing 
 	CORRPUTED_FILES_DIR = '/home/mila/c/chris.emezue/GFNDropout/CIFAR-10-C'
 	corrupted_cifar_test = CIFAR_1O_Corrupted(CORRPUTED_FILES_DIR,transform)
-	corrupted_testloader = torch.utils.data.DataLoader(corrupted_cifar_test, batch_size=batch_size,num_workers=2,pin_memory=True,
+	corrupted_testloader = torch.utils.data.DataLoader(corrupted_cifar_test, batch_size=batch_size,
                         					shuffle=False)
 
 	testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
@@ -466,44 +473,13 @@ class MLPClassifier:
 
 	def fit(self,verbose=True):
 		# Training, make sure it's on GPU, otherwise, very slow...
-		x_valid_augmented_all=[]
-		for i, valid_data in enumerate(validloader):
-			x_valid, y_valid = valid_data
-			x_valid_augmented=[]
-			##augment x_valid once and use it for all epoch/step ( for reward type 2)
-			for idx in range(x_valid.shape[0]):
-				####randomly augment half of the validation set
-				if random.randrange(100)<50:
-					augmenter=random.choice(augmenters_train)#randomly pick an augmenter
-					vec_augmented=augmenter(x_valid[idx,:].unsqueeze(0))
-					x_valid_augmented.append(vec_augmented)
-				else:
-					x_valid_augmented.append(x_valid[idx,:].unsqueeze(0))
-			x_valid_augmented=torch.cat(x_valid_augmented,0).to(device)
-			x_valid_augmented_all.append(x_valid_augmented)
+
 		
-		###### Working on putting augmented test data into one
-		augmented_test_set = []
-		for test_data in testloader:
-			x_test, y_test = test_data
-			
-			augmented_X_tests=[]
-			OOD_batch_accs = []
-			OOD_batch_error = []
 
-			for idx,augmenter in enumerate(augmenters_test):
-				augmented_X_tests.append(augmenter(x_test.detach().clone()))
-			#stack all augmented forms into one array	
-			augmented_test_set.append((torch.cat(augmented_X_tests,0),torch.cat([y_test.detach().clone() for a in range(len(augmenters_test))],0)))
-			 	
-
-
-		GFN_STEP = 10
-		EVAL_STEP =10
-		#best_valid_acc=0
+		best_valid_acc=0
 		for epoch in range(self.max_epoch):
 			running_loss = 0
-			for idx_train, data in enumerate(trainloader, 0):
+			for i, data in enumerate(trainloader, 0):
 		 
 				inputs_, labels_ = data
 			
@@ -591,27 +567,38 @@ class MLPClassifier:
 
 					elif args.RewardType==2:
 						##build mask using validation set but get reward from different augmentation of the validation set
-						
+						start_time = time.time()
 						G_metric={}
 						G_metric_batch_losses = []
-					
-						if idx_train%GFN_STEP==0:
-							for idx_valid, valid_data in enumerate(validloader):
+						####pick early stop, train mask etc.
+						for i, valid_data in enumerate(validloader):
+							x_valid, y_valid = valid_data
+							x_valid, y_valid = x_valid.to(device),y_valid.to(device)
+							##augment x_valid once and use it for all epoch/step ( for reward type 2)
+							x_valid_augmented=[]
+							for idx in range(x_valid.shape[0]):
+								####randomly augment half of the validation set
+								if random.randrange(100)<50:
+									augmenter=random.choice(augmenters_train)#randomly pick an augmenter
+									vec_augmented=augmenter(x_valid[idx,:].unsqueeze(0))
+									x_valid_augmented.append(vec_augmented)
+								else:
+									x_valid_augmented.append(x_valid[idx,:].unsqueeze(0))
+							x_valid_augmented=torch.cat(x_valid_augmented,0)
+							#import pdb;pdb.set_trace()
+							G_metric_batch = self.model._gfn_step(x_mask=x_valid, y_mask=y_valid ,x_reward=x_valid_augmented, y_reward=y_valid)
+							G_metric_batch_losses.append(G_metric_batch['tb_loss'])
+						G_metric['tb_loss'] = np.mean(G_metric_batch_losses)
+						#import pdb;pdb.set_trace()
+						
 
-								x_valid, y_valid = valid_data
-								x_valid, y_valid = x_valid.to(device),y_valid.to(device)
-
-								x_valid_augmented = x_valid_augmented_all[idx_valid]
-								
-								G_metric_batch = self.model._gfn_step(x_mask=x_valid, y_mask=y_valid ,x_reward=x_valid_augmented, y_reward=y_valid)
-								G_metric_batch_losses.append(G_metric_batch['tb_loss'])
-							G_metric['tb_loss'] = np.mean(G_metric_batch_losses)
-						else:
-							G_metric['tb_loss'] = None
 										
 
 				else:
 					outputs = self.model(inputs)
+
+				end_time = time.time()
+
 
 				if "GFFN" not in self.model_type:
 					loss = self.criterion(outputs, labels)
@@ -652,8 +639,8 @@ class MLPClassifier:
 					
 					GFN_loss=self.GFN_operation.DB_train(rewards,self.optimizer_GFN)
 				elif "GFFN" in self.model_type:
-					#GFN_loss=G_metric['tb_loss']
-					GFN_loss = G_metric['tb_loss'] if G_metric['tb_loss'] is not None else GFN_loss
+					GFN_loss=G_metric['tb_loss']
+					
 
 			self.loss_.append(running_loss / len(trainloader))
 			if verbose and epoch%1==0:
@@ -667,97 +654,92 @@ class MLPClassifier:
 			else:
 				self.GFN_losses.append(0)
 
-			if epoch%EVAL_STEP==0:
-				###Do not use test data to train mask or tune hyperparameter, it is cheating
-				with torch.no_grad():
-					batch_test_accs = []
-					batch_test_error = []
-					OOD_accs = []
-					OOD_testerrors = []
-					OOD_batch_accs = []
-					OOD_batch_error = []
-					for idx_test,test_data in enumerate(testloader):
-						
-						
-						x_test, y_test = test_data
-						#x_test,y_test = x_test.to(device),y_test.to(device)
-						
-						
-						length_of_test = x_test.shape[0]
-						augmented_x, augmented_y = augmented_test_set[idx_test]	
-						#put augmented and test into one array so we have one forward pass only		
-						total_test = torch.cat([x_test,augmented_x],0).to(device)
-						total_test_label = torch.cat([y_test,augmented_y],0).to(device)					
-						
-						
-						y_test_pred = self.predict(total_test)
+			###Do not use test data to train mask or tune hyperparameter, it is cheating
+			batch_test_accs = []
+			batch_test_error = []
+			OOD_accs = []
+			OOD_testerrors = []
 
-						acc_ = np.mean((total_test_label[:length_of_test].cpu() == y_test_pred[:length_of_test].cpu()).numpy())
-						batch_test_accs.append(acc_)
-						batch_test_error.append(int(len(x_test)*(1-acc_)))
+			for test_data in testloader:
+				x_test, y_test = test_data
+				x_test,y_test = x_test.to(device),y_test.to(device)
+				y_test_pred = self.predict(x_test).cpu()
+				acc_ = np.mean((y_test.cpu() == y_test_pred.cpu()).numpy())
+				batch_test_accs.append(acc_)
+				batch_test_error.append(int(len(x_test)*(1-acc_)))
 
-						ood_acc_ = np.mean((total_test_label[length_of_test:].cpu() == y_test_pred[length_of_test:].cpu()).numpy())
-						OOD_batch_accs.append(ood_acc_)
-						OOD_batch_error.append(int(len(augmented_x)*(1-ood_acc_)))
-						
-					OOD_accs.append(np.mean(OOD_batch_accs))
-					OOD_testerrors.append(np.mean(OOD_batch_error))
-					self.test_accuracy.append(np.mean(batch_test_accs))
-					self.test_error.append(np.mean(batch_test_error))
+				# do augmenting on test set and get metrics
+				####test on augmented data ( different augmentations!)
+				augmented_X_tests=[]
+				OOD_batch_accs = []
+				OOD_batch_error = []
 
-					'''
-					###validation acc
-					valid_acc_batch=[]
-					for i, valid_data in enumerate(validloader):
-						x_valid, y_valid = valid_data
-						x_valid, y_valid = x_valid.to(device),y_valid.to(device)
-						y_valid_pred = self.predict(x_valid)
-						valid_acc_batch.append(np.mean((y_valid.cpu() == y_valid_pred.cpu()).numpy()))
-					valid_acc = np.mean(valid_acc_batch)	
-					'''
+				for idx,augmenter in enumerate(augmenters_test):
+					augmented_X_tests.append(augmenter(x_test.detach().clone().to(device)))
+				for augmented_X_test in augmented_X_tests:
+					y_test_pred = self.predict(augmented_X_test)
+					ood_acc_ = np.mean((y_test.cpu() == y_test_pred.cpu()).numpy())
+					OOD_batch_accs.append(ood_acc_)
+					OOD_batch_error.append(int(len(augmented_X_test)*(1-ood_acc_)))
+				OOD_accs.append(np.mean(OOD_batch_accs))
+				OOD_testerrors.append(np.mean(OOD_batch_error))
+	
+			self.test_accuracy.append(np.mean(batch_test_accs))
+			self.test_error.append(np.mean(batch_test_error))
 
-					self.test_accuracy_OOD.append(np.mean(OOD_accs))
-					self.test_error_OOD.append(np.mean(OOD_testerrors))
-						
-					# Get accuracy on CIFAR 10 Corrupted 
-					if args.Data=="CIFAR10":
-						corrupted_accs = []
-						for i, corrupted_test_data in enumerate(corrupted_testloader):
-							c_inputs_, c_labels_ = corrupted_test_data
-							c_inputs_, c_labels_ = c_inputs_.to(device), c_labels_.to(device)
-							y_c_test_pred = self.predict(c_inputs_)
-							corrupted_accs.append(np.mean((c_labels_.cpu() == y_c_test_pred.cpu()).numpy()))
+			###validation acc
+			valid_acc_batch=[]
+			for i, valid_data in enumerate(validloader):
+				x_valid, y_valid = valid_data
+				x_valid, y_valid = x_valid.to(device),y_valid.to(device)
+				y_valid_pred = self.predict(x_valid)
+				valid_acc_batch.append(np.mean((y_valid.cpu() == y_valid_pred.cpu()).numpy()))
+			valid_acc = np.mean(valid_acc_batch)	
+
+
+			self.test_accuracy_OOD.append(np.mean(OOD_accs))
+			self.test_error_OOD.append(np.mean(OOD_testerrors))
 				
-						
-						self.corrupted_accs.append(np.mean(corrupted_accs))
+			
+			# Get accuracy on CIFAR 10 Corrupted 
+			if args.Data=="CIFAR10":
+				corrupted_accs = []
+				for i, corrupted_test_data in enumerate(corrupted_testloader):
+					c_inputs_, c_labels_ = corrupted_test_data
+					c_inputs_, c_labels_ = Variable(c_inputs_).to(device), Variable(c_labels_).to(device)
+					y_c_test_pred = self.predict(c_inputs_)
+					corrupted_accs.append(np.mean((c_labels_.cpu() == y_c_test_pred.cpu()).numpy()))
+		 
+				
+				self.corrupted_accs.append(np.mean(corrupted_accs))
 
-						df = pd.DataFrame({'train_loss':self.loss_,
-									"GFN_losses":self.GFN_losses
-									})
+			
+				df = pd.DataFrame({'train_loss':self.loss_,
+							'test_acc':self.test_accuracy,
+							'test_error':self.test_error,
+							"GFN_losses":self.GFN_losses,
+							'test_acc_OOD':self.test_accuracy_OOD,
+							'test_error_OOD':self.test_error_OOD,
+							'CIFAR_10C_acc':self.corrupted_accs})
+			else:
+				df = pd.DataFrame({'train_loss':self.loss_,
+							'test_acc':self.test_accuracy,
+							'test_error':self.test_error,
+							"GFN_losses":self.GFN_losses,
+							'test_acc_OOD':self.test_accuracy_OOD,
+							'test_error_OOD':self.test_error_OOD})
+							
 
-						df_perf = pd.DataFrame({'test_acc':self.test_accuracy,
-									'test_error':self.test_error,
-									'test_acc_OOD':self.test_accuracy_OOD,
-									'test_error_OOD':self.test_error_OOD,
-									'CIFAR_10C_acc':self.corrupted_accs})	
-					else:
-						df = pd.DataFrame({'train_loss':self.loss_,
-									"GFN_losses":self.GFN_losses,
-									})
 
-						df_perf = pd.DataFrame({'test_acc':self.test_accuracy,
-									'test_error':self.test_error,
-									'test_acc_OOD':self.test_accuracy_OOD,
-									'test_error_OOD':self.test_error_OOD})
-					
-
-				df_perf.to_csv(f"{EXP_FOLDER}/"+Task_name+"_performance.csv")
-				df.to_csv(f"{EXP_FOLDER}/"+Task_name+"_losses.csv")
+			df.to_csv(f"{EXP_FOLDER}/"+Task_name+"_performance.csv")
 
 			if verbose and epoch%1==0:
-				print('Test error: {}; test accuracy: {} ,train loss: {} GFN loss: {} '.format(self.test_error[-1], self.test_accuracy[-1],self.loss_[-1],self.GFN_losses[-1]))
+				print('Test error: {}; test accuracy: {} ,train loss: {} GFN loss: {} Valid_acc: {}'.format(self.test_error[-1], self.test_accuracy[-1],self.loss_[-1],self.GFN_losses[-1],valid_acc))
 			
-			torch.save(self.model.state_dict(), "/home/mila/c/chris.emezue/scratch/gfndropout/checkpoints/"+Task_name+'.pt')
+			if valid_acc> best_valid_acc:
+				#use validation performance to decide early stopping
+				torch.save(self.model.state_dict(), "/home/mila/c/chris.emezue/scratch/gfndropout/checkpoints/"+Task_name+'.pt')
+				best_valid_acc=valid_acc
 
 
 		return self	

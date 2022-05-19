@@ -1,10 +1,10 @@
 #!/bin/bash
 #SBATCH --job-name=dropout_train
 #SBATCH --gres=gpu:48gb:1             # Number of GPUs (per node)
-#SBATCH --mem=80G               # memory (per node)
+#SBATCH --mem=65G               # memory (per node)
 #SBATCH --time=2-5:50            # time (DD-HH:MM)
-#SBATCH --error=/home/mila/c/chris.emezue/GFNDropout/slurmerror_gfn_dropout.txt
-#SBATCH --output=/home/mila/c/chris.emezue/GFNDropout/slurmoutput_gfn_dropout.txt
+#SBATCH --error=/home/mila/c/chris.emezue/GFNDropout/slurmerror_gfn_baseline.txt
+#SBATCH --output=/home/mila/c/chris.emezue/GFNDropout/slurmoutput_gfn_baseline.txt
 
 ###########cluster information above this line
 
@@ -37,7 +37,5 @@ DataRatio=$6
 
 seed=$7
 
-FOLDER='Results_Final_18_200'
 
-
-python Run_trainingDebug.py --Data $data --Method $method --Hidden_dim $dim --p $p --seed $seed --DataRatio $DataRatio --Epochs 200 --RewardType ${RewardType} --folder $FOLDER 
+python Run_training.py --Data $data --Method $method --Hidden_dim $dim --p $p --seed $seed --DataRatio $DataRatio --Epochs 50 --RewardType ${RewardType}

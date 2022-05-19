@@ -85,7 +85,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 ####part 1 load MNIST/CIFAR data
-batch_size=256
+batch_size=128
 if args.Data=="MNIST":
 	image_size_use = (224,224)
 	mnist = datasets.MNIST(download=False, train=True, root="data/").data.float()
@@ -121,7 +121,7 @@ if args.Data=="MNIST":
 	validloader = torch.utils.data.DataLoader(validset, batch_size=batch_size*2, shuffle=False,num_workers=2)
 		
 
-	testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size*2, shuffle=False,num_workers=2)
+	testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size*2, shuffle=False)
 	
 
 	dataiter = iter(trainloader)
@@ -202,16 +202,16 @@ if args.Data=="CIFAR10":
 	testset  =torch.utils.data.Subset(testset, indices)
 	
 	trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
-											  shuffle=True,num_workers=2,pin_memory=True)
+											  shuffle=True,num_workers=2)
 
 
-	validloader = torch.utils.data.DataLoader(validset, batch_size=batch_size*2, shuffle=False,num_workers=2,pin_memory=True)
+	validloader = torch.utils.data.DataLoader(validset, batch_size=batch_size*2, shuffle=False,num_workers=2)
 		
 
 	# Also use CIFAR 10 C for testing 
 	CORRPUTED_FILES_DIR = '/home/mila/c/chris.emezue/GFNDropout/CIFAR-10-C'
 	corrupted_cifar_test = CIFAR_1O_Corrupted(CORRPUTED_FILES_DIR,transform)
-	corrupted_testloader = torch.utils.data.DataLoader(corrupted_cifar_test, batch_size=batch_size*4,num_workers=2,pin_memory=True,
+	corrupted_testloader = torch.utils.data.DataLoader(corrupted_cifar_test, batch_size=batch_size,num_workers=4,
                         					shuffle=False)
 
 	testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size*2,
@@ -476,6 +476,7 @@ class MLPClassifier:
 	def fit(self,verbose=True):
 		# Training, make sure it's on GPU, otherwise, very slow...
 		x_valid_augmented_all=[]
+
 		for i, valid_data in enumerate(validloader):
 			x_valid, y_valid = valid_data
 			x_valid_augmented=[]
@@ -507,7 +508,7 @@ class MLPClassifier:
 			 	
 
 
-		GFN_STEP = 10
+		GFN_STEP = 50
 		EVAL_STEP =10
 		#best_valid_acc=0
 		for epoch in range(self.max_epoch):
@@ -688,7 +689,7 @@ class MLPClassifier:
 					GFN_loss = G_metric['tb_loss'] if G_metric['tb_loss'] is not None else GFN_loss
 
 				print(f"Iteration {idx_train} took: {time.time()-iteration_time}")	
-				print(f"Avg Time taken for Reward 2: {np.mean(reward_2_time) if reward_2_time!=[] else 0}")
+				print(f"Avg Time taken for Reward 2: {np.mean(reward_2_time)}")
 			print(f"Time to finish epoch {epoch}: {time.time()-epoch_start_time}")
 			self.loss_.append(running_loss / len(trainloader))
 			if verbose and epoch%1==0:
@@ -773,11 +774,9 @@ class MLPClassifier:
 					if args.Data=="CIFAR10":
 						corrupted_accs = []
 						for i, corrupted_test_data in enumerate(corrupted_testloader):
-							#c_time = time.time()
 							c_inputs_, c_labels_ = corrupted_test_data
 							c_inputs_, c_labels_ = c_inputs_.to(device), c_labels_.to(device)
 							y_c_test_pred = self.predict(c_inputs_)
-							#print(f"Time for one pass in corrupted: {time.time() - c_time}")
 							corrupted_accs.append(np.mean((c_labels_.cpu() == y_c_test_pred.cpu()).numpy()))
 				
 						
@@ -785,7 +784,7 @@ class MLPClassifier:
 
 					
 						df = pd.DataFrame({'train_loss':self.loss_,
-									"GFN_losses":self.GFN_losses
+									"GFN_losses":self.GFN_losses,
 									})
 
 						df_perf = pd.DataFrame({'test_acc':self.test_accuracy,
@@ -806,15 +805,15 @@ class MLPClassifier:
 					print(f"Time for CIFAR10C: {time.time()-cifar10c_start_time} ")				
 
 				print(f"Time for evaluation: {time.time()-eval_start_time}")
-				df_perf.to_csv(f"{EXP_FOLDER}/"+Task_name+"_performance.csv")
-				df.to_csv(f"{EXP_FOLDER}/"+Task_name+"_losses.csv")
+			df_perf.to_csv(f"{EXP_FOLDER}/"+Task_name+"_performance.csv")
+			df.to_csv(f"{EXP_FOLDER}/"+Task_name+"_losses.csv")
 
 			if verbose and epoch%1==0:
 				print('Test error: {}; test accuracy: {} ,train loss: {} GFN loss: {} '.format(self.test_error[-1], self.test_accuracy[-1],self.loss_[-1],self.GFN_losses[-1]))
 			
 			#if valid_acc> best_valid_acc:
 			#	#use validation performance to decide early stopping
-			torch.save(self.model.state_dict(), "/home/mila/c/chris.emezue/scratch/gfndropout/checkpoints/"+Task_name+'.pt')
+			#	torch.save(self.model.state_dict(), "/home/mila/c/chris.emezue/scratch/gfndropout/checkpoints/"+Task_name+'.pt')
 			#	best_valid_acc=valid_acc
 
 
