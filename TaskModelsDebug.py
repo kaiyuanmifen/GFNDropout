@@ -1,5 +1,7 @@
 
+import torch
 import numpy as np
+import torch.nn.functional as F
 import torch
 from torch.autograd import Variable
 import torch.nn as nn
@@ -610,7 +612,6 @@ class MLPMaskGenerator(nn.Module):
 
     def _dist(self, x):
         x = self.mlp(x)
-        x = torch.nan_to_num(x, nan=1e-6) # this is to prevent the code from crashing when the logits are nan. Idea from Bonaventure Dossou 
         x = torch.sigmoid(x)
         dist = (1. - self.dropout_rate) * self.num_unit * x / (x.sum(1).unsqueeze(1) + 1e-6)
         dist = dist.clamp(0, 1)

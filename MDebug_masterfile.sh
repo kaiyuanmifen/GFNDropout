@@ -2,7 +2,7 @@
 
 #SBATCH --job-name=dropout_train
 #SBATCH --gres=gpu:48gb:1             # Number of GPUs (per node)
-#SBATCH --mem=85G               # memory (per node)
+#SBATCH --mem=75G               # memory (per node)
 #SBATCH --time=2-5:50            # time (DD-HH:MM)
 
 ###########cluster information above this line
@@ -21,12 +21,11 @@ declare -a all_data=("MNIST" "CIFAR10" "SVHN")
 #declare -a all_data=("CIFAR10" "MNIST" )
 
 #declare -a all_data=("CIFAR10")
-
+#declare -a all_methods=("RESNET_nodropout" "RESNET_dropout")
 declare -a all_methods=("RESNET_nodropout" "RESNET_Standout" "RESNET_dropout" "RESNET_SVD" "RESNET_GFFN")
-
 #declare -a all_methods=("RESNET_GFFN" "RESNET_nodropout" "RESNET_StandoutAll" "RESNET_dropoutAll" "RESNET_SVDAll")
 #declare -a all_methods=("RESNET_GFFN")
-#declare -a all_methods=("RESNET_GFFN" "RESNET_dropout")
+#declare -a all_methods=("RESNET_GFFN")
 
 #declare -a all_methods=("RESNET_GFFN" "RESNET_nodropout" "RESNET_StandoutAll" "RESNET_dropoutAll" "RESNET_SVDAll")
 
@@ -37,7 +36,6 @@ declare -a all_p=(0.5)
 
 
 declare -a RewardTypes=(2)
-#declare -a RewardTypes=(0)
 
 
 declare -a All_DataRatio=(1)
@@ -64,7 +62,7 @@ do
 						for round in "${all_rounds[@]}"
 						do
 
-							sbatch JobSubmit.sh $data $method $dim $p $RewardType $DataRatio $round	
+							bash JobSubmitDebug.sh $data $method $dim $p $RewardType $DataRatio $round	
 						done
 					done
 				done

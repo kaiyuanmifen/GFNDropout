@@ -22,12 +22,15 @@ class CIFAR_1O_Corrupted(Dataset):
         label_file = np.load(os.path.join(CORRPUTED_FILES_DIR,'labels.npy'))
         corrupted_files = [os.path.join(CORRPUTED_FILES_DIR,f.name) for f in os.scandir(CORRPUTED_FILES_DIR) if str(f.name).endswith('npy') and str(f.name)!='labels.npy']
 
-        # From each corrupted file, take the firs 10,000. corresponds to taking severity 1.
-        corrupted_files_numpy = [np.load(f)[:10000] for f in corrupted_files ]
-        label_files_numpy = [label_file[:10000] for f in corrupted_files ]
+        # 10k of 5 sevrity. we  want 200 from each 10k
+        all_indices = [i for i in range(len(label_file))]
+       
+        required_range =  [all_indices[i:i + 200] for i in range(0, len(all_indices), 10000)]
+        required_range = [a for m in required_range for a in m]
+        
+        corrupted_files_numpy = [np.load(f)[required_range] for f in corrupted_files ]
+        label_files_numpy = [label_file[required_range] for f in corrupted_files ]
 
-        #self.data = torch.from_numpy(np.vstack(corrupted_files_numpy)).float()
-        #self.labels = torch.from_numpy(np.hstack(label_files_numpy))
         self.data = np.vstack(corrupted_files_numpy)
         self.labels = np.hstack(label_files_numpy)
 

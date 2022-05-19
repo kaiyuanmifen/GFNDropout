@@ -424,7 +424,7 @@ class RESNET_GFFN(nn.Module):
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.CNNoutputsize = 512 * self.expansion
         '''
-        resnet18 = models.resnet18(pretrained=True)   #load resnet18 model
+        resnet18 = models.resnet18(pretrained=False)   #load resnet18 model
         if img_channels==1:
             resnet18.conv1 = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
         self.CNNoutputsize = resnet18.fc.in_features #extract fc layers features
@@ -514,7 +514,7 @@ class ResNet_MaskedDropout_GFFN(nn.Module):
         self.CNNoutputsize = 512 * self.expansion
         '''
         
-        resnet18 = models.resnet18(pretrained=True)   #load resnet18 model
+        resnet18 = models.resnet18(pretrained=False)   #load resnet18 model
         if img_channels==1:
             resnet18.conv1 = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
         self.CNNoutputsize = resnet18.fc.in_features #extract fc layers features
@@ -599,7 +599,8 @@ class RandomMaskGenerator(nn.Module):
     def __init__(self, dropout_rate):
         super().__init__()
         self.dropout_rate = torch.tensor(dropout_rate).type(torch.float32)
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        #self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.device = torch.device('cpu')
     def forward(self, x):
         return torch.bernoulli((1. - self.dropout_rate) * torch.ones(x.shape))
 
@@ -642,6 +643,7 @@ class MLPMaskGenerator(nn.Module):
 
     def _dist(self, x):
         x = self.mlp(x)
+        x = torch.nan_to_num(x, nan=1e-6) # this is to prevent the code from crashing when the logits are nan. Idea from Bonaventure Dossou 
         x = torch.sigmoid(x)
         dist = (1. - self.dropout_rate) * self.num_unit * x / (x.sum(1).unsqueeze(1) + 1e-6)
         dist = dist.clamp(0, 1)
@@ -875,7 +877,7 @@ class ResNet_SVD(nn.Module):
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.CNNoutputsize = 512 * self.expansion
         '''
-        resnet18 = models.resnet18(pretrained=True)   #load resnet18 model
+        resnet18 = models.resnet18(pretrained=False)   #load resnet18 model
         if img_channels==1:
             resnet18.conv1 = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
         self.CNNoutputsize = resnet18.fc.in_features #extract fc layers features
@@ -956,7 +958,7 @@ class ResNet_Standout(nn.Module):
 
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         '''
-        resnet18 = models.resnet18(pretrained=True)   #load resnet18 model
+        resnet18 = models.resnet18(pretrained=False)   #load resnet18 model
         if img_channels==1:
             resnet18.conv1 = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
         self.CNNoutputsize = resnet18.fc.in_features #extract fc layers features
@@ -1043,7 +1045,7 @@ class ResNet_MaskedDropout(nn.Module):
 
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         '''
-        resnet18 = models.resnet18(pretrained=True)   #load resnet18 model
+        resnet18 = models.resnet18(pretrained=False)   #load resnet18 model
         if img_channels==1:
             resnet18.conv1 = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
         self.CNNoutputsize = resnet18.fc.in_features #extract fc layers features
@@ -1146,7 +1148,7 @@ class ResNet(nn.Module):
 
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         '''
-        resnet18 = models.resnet18(pretrained=True)   #load resnet18 model
+        resnet18 = models.resnet18(pretrained=False)   #load resnet18 model
         if img_channels==1:
             resnet18.conv1 = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
         self.CNNoutputsize = resnet18.fc.in_features #extract fc layers features
