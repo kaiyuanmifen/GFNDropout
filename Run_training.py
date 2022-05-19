@@ -23,6 +23,9 @@ import torch.optim as optim
 from torch.utils.data.sampler import SubsetRandomSampler
 import random
 
+from backbone_resnet import Network as Backbone
+from gater_resnet import Gater
+
 import numpy as np
 import pandas as pd
 import time
@@ -452,6 +455,18 @@ class MLPClassifier:
 		elif "MLP_GFN" in self.model_type:
 		  self.model = MLP_MaskedDropout(Input_size=image_size[0]*image_size[1]*image_size[2],hidden_size=N_units)
 
+		elif "GaterNet" in self.model_type:
+			if "20" in self.model_type:
+				backbone_depth = 20
+			else:
+				backbone_depth = 56
+			backbone = Backbone(depth=backbone_depth, num_classes=10)
+			backbone = backbone.to(device)
+			# backbone.module.gate_size if model put in parallel mode
+			gater = Gater(depth=20, bottleneck_size=8, gate_size=backbone.gate_size)
+			gater = gater.to(device)
+			self.model = (gater, backbone)
+
 		elif self.model_type=="MLP_SVD":
 			self.model = MLP_SVD(Input_size=image_size[0]*image_size[1]*image_size[2],hidden_size=N_units)
 		elif self.model_type=="MLP_Standout":
@@ -561,10 +576,21 @@ class MLPClassifier:
 		  self.model = Resenet_Alldrop(num_classes=10,image_size=image_size,hidden_size=N_units,droprates=droprates)
 
 
-		self.model.to(device)
+		if "GaterNet" in self.model_type:
+			self.model = (self.model[0].to(device), self.model[1].to(device))
+		else:
+			self.model.to(device)
 		self.criterion = nn.CrossEntropyLoss().to(device)
-		self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
-		
+
+		if "GaterNet" in self.model_type:
+			gater, backbone = self.model
+			params_b = [param for param in backbone.parameters()]
+			params_g = [param for param in gater.parameters()]
+
+			self.optimizer = optim.Adam(params_g + params_b, lr=lr)
+		else:
+			self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
+
 		self.loss_ = []
 		self.GFN_losses=[]
 		self.test_accuracy = []
@@ -592,10 +618,17 @@ class MLPClassifier:
 			total_params = sum(p.numel() for p in self.model.parameters())+sum(p.numel() for p in self.model_DB.parameters())
 
 		else:
-			total_params = sum(p.numel() for p in self.model.parameters())
+			if "GaterNet" in self.model_type:
+				gater, backbone = self.model
+				n_params_b = sum([param.view(-1).size()[0] for param in backbone.parameters()])
+				n_params_g = sum([param.view(-1).size()[0] for param in gater.parameters()])
+				print('Number of parameters in backbone: {}'.format(n_params_b))
+				print('Number of parameters in gater: {}'.format(n_params_g))
+				total_params = n_params_b + n_params_g
+			else:
+				total_params = sum(p.numel() for p in self.model.parameters())
 
-
-		print("number of parameters:")
+		print("total number of parameters for {} on task {}:".format(self.model_type, args.Data))
 		print(total_params)
 
 
@@ -726,25 +759,18 @@ class MLPClassifier:
 						y_valid_original=y_valid
 
 						x_valid_original=x_valid_original.reshape(x_valid_original.shape[0],-1)
-						x_valid_augmented=x_valid_augmented.reshape(x_valid_augmented.shape[0],-1)						
-						# x_valid_augmented=[]
-						# x_valid_original=[]
-						# y_valid_original=[]
-						# for idx, augmenter in enumerate(augmenters):
-						# 	if idx>=(len(augmenters)//2):
-						# 		x_valid_augmented.append(augmenter(x_valid).reshape(x_valid.shape[0],-1).detach().clone().to(device))
-						# 		x_valid_original.append(x_valid.reshape(x_valid.shape[0],-1))
-						# 		y_valid_original.append(y_valid)
-						# x_valid_original=torch.cat(x_valid_original,0)
-						# x_valid_augmented=torch.cat(x_valid_augmented,0)#augmented x_valid
-						# y_valid_original=torch.cat(y_valid_original,0)
-
+						x_valid_augmented=x_valid_augmented.reshape(x_valid_augmented.shape[0],-1)
 						G_metric = self.model._gfn_step(x_mask=x_valid_original, y_mask=y_valid_original ,x_reward=x_valid_augmented, y_reward=y_valid_original)
 						
 										
 
 				else:
-					outputs = self.model(inputs)
+					if "GaterNet" in self.model_type:
+						gater, backbone = self.model
+						gate = gater(inputs)
+						outputs = backbone(inputs, gate)
+					else:
+						outputs = self.model(inputs)
 
 				if "GFFN" not in self.model_type:
 					loss = self.criterion(outputs, labels)
@@ -840,7 +866,12 @@ class MLPClassifier:
 			
 			if valid_acc> best_valid_acc:
 				#use validation performance to decide early stopping
-				torch.save(self.model.state_dict(), "checkpoints/"+Task_name+'.pt')
+				if "GaterNet" in self.model_type:
+					model, backbone = self.model
+					torch.save(model.state_dict(), "checkpoints/"+Task_name+'_gater.pt')
+					torch.save(backbone.state_dict(), "checkpoints/"+Task_name+'_backbone.pt')
+				else:
+					torch.save(self.model.state_dict(), "checkpoints/"+Task_name+'.pt')
 				best_valid_acc=valid_acc
 
 
@@ -848,7 +879,11 @@ class MLPClassifier:
 	
 	def predict(self, x):
 		# Used to keep all test errors after each epoch
-		model = self.model.eval()
+		if "GaterNet" in self.model_type:
+			model, backbone = self.model
+		else:
+			model = self.model.eval()
+
 		with torch.no_grad():
 			if "GFNFM" in self.model_type:
 				N_repeats=11
@@ -908,19 +943,46 @@ class MLPClassifier:
 				
 				outputs=outputs.mean(0)
 
-
+			elif "GaterNet" in self.model_type:
+				outputs = self.gather_predict(backbone, model, device, Variable(x))
 
 			else:
 			  outputs = model(Variable(x))
-
+			
 			_, pred = torch.max(outputs.data, 1)
-		model = self.model.train()
+
+		if "GaterNet" in self.model_type:
+			self.model = (self.model[0].train(), self.model[1].train())
+			model = self.model[0]
+		else:
+			model = self.model.train()
 		return pred
 	
 	def __str__(self):
 		return 'Hidden layers: {}; dropout rates: {}'.format(self.hidden_layers, self.droprates)
 
 
+	def gather_predict(self, backbone, gater, device, x):
+	  """Tests the model on a test set."""
+	  backbone.eval()
+	  gater.eval()
+	  # loss = 0
+	  # correct = 0
+	  # preds = []
+	  # with torch.no_grad():
+	  # data, target = loader
+	  # data, target = data.to(device), target.to(device)
+	  gate = gater(x)
+	  outputs = backbone(x, gate)
+	  # loss += F.cross_entropy(output, target, size_average=False).item()
+	  # _, pred = torch.max(output.data, 1) # output.max(1, keepdim=True)[1]
+	  # preds += list(preds)
+	  # correct += pred.eq(target.view_as(pred)).sum().item()
+	  # loss /= len(test_loader.dataset)
+	  # acy = 100. * correct / len(test_loader.dataset)
+	  # print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.4f}%)\n'.format(
+	  #     loss, correct, len(test_loader.dataset), acy))
+	  return outputs
 
 
 #######run the model 

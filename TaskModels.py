@@ -399,6 +399,7 @@ class CNNMaskedDropout(nn.Module):
             x = self.activation()(layer(x))
             # generate mask & dropout
             m = mg(x).detach()
+            m = m.to(torch.device('cuda'))
             masks.append(m)
             multipliers = m.shape[1] / (m.sum(1) + 1e-6)
             x = torch.mul((x * m).T, multipliers).T
