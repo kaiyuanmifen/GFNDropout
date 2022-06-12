@@ -3,7 +3,7 @@ from GFN_SampleMask import GFN_SamplingMask
 from cifar10c import CIFAR_1O_Corrupted
 from GFNFunctions import *
 from Dropout_DIY import *
-from TaskModels import *
+from TaskModels_Pretrained2 import *
 import os
 import matplotlib.pyplot as plt
 import matplotlib
@@ -76,21 +76,21 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 ####part 1 load MNIST/CIFAR data
-batch_size=512
+batch_size=128
 if args.Data=="MNIST":
-	image_size_use = (224,224)
-	mnist = datasets.MNIST(download=False, train=True, root="data/").data.float()
+	image_size_use = (28,28)
+	#mnist = datasets.MNIST(download=False, train=True, root="data/").data.float()
 	#Transform for MNIST. Source: https://zablo.net/blog/post/using-resnet-for-mnist-in-pytorch-tutorial/ 
-	transform = transforms.Compose([transforms.Resize(image_size_use),transforms.ToTensor(), transforms.Normalize(tuple([(mnist.mean()/255).numpy().tolist()]), tuple([(mnist.std()/255).numpy().tolist()]))])
+	transform = transforms.Compose([transforms.Resize(image_size_use),transforms.ToTensor(), transforms.Normalize((0), (1))])
 	
 	trainset = datasets.MNIST(root='data/', train=True, download=True, transform=transform)
 	testset = datasets.MNIST(root='data/', train=False, transform=transform)
 
 	indices = torch.randperm(len(trainset))[:int(len(trainset)*args.DataRatio)]
 
-	validset =torch.utils.data.Subset(trainset, indices[int(0.7*len(indices)):(int(1*len(indices))-1)])
+	validset =torch.utils.data.Subset(trainset, indices[int(0.8*len(indices)):(int(1*len(indices))-1)])
 	
-	trainset =torch.utils.data.Subset(trainset, indices[:int(0.7*len(indices))])
+	trainset =torch.utils.data.Subset(trainset, indices[:int(0.8*len(indices))])
 
 	indices = torch.randperm(len(testset))
 
@@ -161,10 +161,11 @@ if args.Data=="MNIST":
 	# for augmenter in augmenters
 	# ]
 if args.Data=="CIFAR10":
-	image_size_use = (224,224)
-	cifar10 = torch.from_numpy(datasets.CIFAR10(download=False, train=True, root="data/").data).float()
+	image_size_use = (32,32)
+	#cifar10 = torch.from_numpy(datasets.CIFAR10(download=False, train=True, root="data/").data).float()
 	# CIFAR is of shape (BS,H,W,C)
-	transform = transforms.Compose([transforms.Resize(image_size_use),transforms.ToTensor(), transforms.Normalize(tuple((cifar10.mean((0,1,2))/255).numpy().tolist()), tuple((cifar10.std((0,1,2))/255).numpy().tolist()))])
+	mean_,std_ = (0.4913996160030365, 0.482157438993454, 0.44653332233428955), (0.24703224003314972, 0.24348512291908264, 0.26158785820007324)
+	transform = transforms.Compose([transforms.Resize(image_size_use),transforms.ToTensor(), transforms.Normalize(mean_,std_)])
 	
 	#transform = transforms.Compose(
 	#[transforms.ToTensor(),
@@ -184,9 +185,9 @@ if args.Data=="CIFAR10":
 	
 	#indices = torch.randperm(len(trainset))
 
-	validset =torch.utils.data.Subset(trainset, indices[int(0.7*len(indices)):(int(1*len(indices))-1)])
+	validset =torch.utils.data.Subset(trainset, indices[int(0.8*len(indices)):(int(1*len(indices))-1)])
 	
-	trainset =torch.utils.data.Subset(trainset, indices[:int(0.7*len(indices))])
+	trainset =torch.utils.data.Subset(trainset, indices[:int(0.8*len(indices))])
 	#indices = torch.randperm(len(testset))[:300]
 	indices = torch.randperm(len(testset))
 
@@ -260,10 +261,12 @@ if args.Data=="CIFAR10":
 		plt.imshow(np.transpose(npimg, (1, 2, 0)))
 		plt.savefig('images/AugmentedCIFAR_'+str(idx)+'.png')
 if args.Data=="SVHN":
-	image_size_use = (224,224)
-	svhn = torch.from_numpy(datasets.SVHN(download=False, split="train", root="data/").data).float()
+	image_size_use = (32,32)
+	#svhn = torch.from_numpy(datasets.SVHN(download=False, split="train", root="data/").data).float()
 	# SVHN is of shape (BS,C,H,W)
-	transform = transforms.Compose([transforms.Resize(image_size_use),transforms.ToTensor(), transforms.Normalize(tuple((svhn.mean((0,2,3))/255).numpy().tolist()), tuple((svhn.std((0,2,3))/255).numpy().tolist()))])
+	mean_,std_ =(0.43768417835235596, 0.44376617670059204, 0.47280240058898926), (0.19803011417388916, 0.2010156214237213, 0.19703614711761475)
+
+	transform = transforms.Compose([transforms.Resize(image_size_use),transforms.ToTensor(), transforms.Normalize(mean_,std_)])
 
 	
 	#transform = transforms.Compose(
@@ -280,9 +283,9 @@ if args.Data=="SVHN":
 
 	indices = torch.randperm(len(trainset))[:int(len(trainset)*args.DataRatio)]
 
-	validset =torch.utils.data.Subset(trainset, indices[int(0.7*len(indices)):(int(1*len(indices))-1)])
+	validset =torch.utils.data.Subset(trainset, indices[int(0.8*len(indices)):(int(1*len(indices))-1)])
 	
-	trainset =torch.utils.data.Subset(trainset, indices[:int(0.7*len(indices))])
+	trainset =torch.utils.data.Subset(trainset, indices[:int(0.8*len(indices))])
 
 	indices = torch.randperm(len(testset))
 
@@ -354,11 +357,10 @@ if args.Data=="SVHN":
 #part 2 function to run the task
 
 class MLPClassifier:
-	def __init__(self, image_size,droprates=0.5, batch_size=128, max_epoch=10, \
+	def __init__(self, image_size,droprates=0.5,  max_epoch=10, \
 				 lr=0.001, momentum=0,model_type="MLP_nodropout",N_units=50):
 		# Wrap MLP model
 		self.droprates = droprates
-		self.batch_size = batch_size
 		self.max_epoch = max_epoch
 		self.model_type=model_type
 
@@ -699,7 +701,6 @@ class MLPClassifier:
 						ood_acc_ = np.mean((total_test_label[length_of_test:].cpu() == y_test_pred[length_of_test:].cpu()).numpy())
 						OOD_batch_accs.append(ood_acc_)
 						OOD_batch_error.append(int(len(augmented_x)*(1-ood_acc_)))
-						
 					OOD_accs.append(np.mean(OOD_batch_accs))
 					OOD_testerrors.append(np.mean(OOD_batch_error))
 					self.test_accuracy.append(np.mean(batch_test_accs))
@@ -858,14 +859,7 @@ elif args.Data=="SVHN":
 
 mlp1 = [MLPClassifier(droprates=args.p,image_size=image_size,max_epoch=args.Epochs,model_type=args.Method,N_units=args.Hidden_dim)]
 
-# mlp1 = [MLPClassifier(droprates=[0.0, 0.5], max_epoch=3,model_type="MLP"),
-#         MLPClassifier(droprates=[0.0, 0.0], max_epoch=3,model_type="MLP_GFN"),
-#         MLPClassifier(droprates=[0.0, 0.0], max_epoch=3,model_type="MLP_SVD"),
-#        MLPClassifier(droprates=[0.0, 0.0], max_epoch=3,model_type="MLP_Standout")
-#         ]
-#       
-# Training, set verbose=True to see loss after each epoch.
-#[mlp.fit(trainset, testset,verbose=True) for mlp in mlp1]
+
 [mlp.fit(verbose=True) for mlp in mlp1]
 
 # Save torch models

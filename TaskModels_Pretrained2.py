@@ -10,8 +10,7 @@ import torch.optim as optim
 from torch.utils.data.sampler import SubsetRandomSampler
 from torch.nn import Parameter
 from Dropout_DIY import *
-from resnet import Block
-from torchvision import models
+from resnet_pytorch import ResNet18
 
 class MLP(nn.Module):
     def __init__(self,Input_size, hidden_size=10, droprates=0):
@@ -393,46 +392,10 @@ class RESNET_GFFN(nn.Module):
         assert num_layers in [18, 34, 50, 101, 152], "ResNet: Unknown architecture! Number of layers has to be 18, 34, 50, 101, or 152 "
         if hidden is None:
             hidden = [32,32]
-        '''
-        if hidden is None:
-            hidden = [32,32]
-        block = Block
-        if num_layers < 50:
-            self.expansion = 1
-        else:
-            self.expansion = 4
-        if num_layers == 18:
-            layers = [2, 2, 2, 2]
-        elif num_layers == 34 or num_layers == 50:
-            layers = [3, 4, 6, 3]
-        elif num_layers == 101:
-            layers = [3, 4, 23, 3]
-        else:
-            layers = [3, 8, 36, 3]
-        self.in_channels = 64
-        self.conv1 = nn.Conv2d(img_channels, 64, kernel_size=7, stride=2, padding=3)
-        self.bn1 = nn.BatchNorm2d(64)
-        self.relu = nn.ReLU()
-        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+      
 
-        # ResNetLayers
-        self.layer1 = self.make_layers(num_layers, block, layers[0], intermediate_channels=64, stride=1)
-        self.layer2 = self.make_layers(num_layers, block, layers[1], intermediate_channels=128, stride=2)
-        self.layer3 = self.make_layers(num_layers, block, layers[2], intermediate_channels=256, stride=2)
-        self.layer4 = self.make_layers(num_layers, block, layers[3], intermediate_channels=512, stride=2)
-
-        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        self.CNNoutputsize = 512 * self.expansion
-        '''
-        resnet18 = models.resnet18(pretrained=False)   #load resnet18 model
-        if img_channels==1:
-            resnet18.conv1 = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
-        self.CNNoutputsize = resnet18.fc.in_features #extract fc layers features
-        self.model= nn.Sequential(*list(resnet18.children())[:-1])
-        self.CNNoutputsize = resnet18.fc.in_features #extract fc layers features
-        self.model= nn.Sequential(*list(resnet18.children())[:-1])
-     
-        h_old =self.CNNoutputsize
+        self.model = ResNet18(img_channels)   #load resnet18 model
+        h_old =self.model.get_last_in_features()
         self.fc = nn.ModuleList()
         for h in hidden:
             self.fc.append(nn.Linear(h_old,h))
@@ -442,18 +405,7 @@ class RESNET_GFFN(nn.Module):
         self.activation = activation
 
     def forward(self, x):
-        '''
-        x = self.conv1(x)
-        x = self.bn1(x)
-        x = self.relu(x)
-        x = self.maxpool(x)
-        x = self.layer1(x)
-        x = self.layer2(x)
-        x = self.layer3(x)
-        x = self.layer4(x)
-        x = self.avgpool(x)
-        x = x.reshape(x.shape[0], -1)
-        '''
+        
         x = self.model(x)
         x = x.reshape(x.shape[0], -1)
         for layer in self.fc:
@@ -461,17 +413,6 @@ class RESNET_GFFN(nn.Module):
        
         x= self.out_layer(x)
         return x
-
-    def make_layers(self, num_layers, block, num_residual_blocks, intermediate_channels, stride):
-        layers = []
-
-        identity_downsample = nn.Sequential(nn.Conv2d(self.in_channels, intermediate_channels*self.expansion, kernel_size=1, stride=stride),
-                                            nn.BatchNorm2d(intermediate_channels*self.expansion))
-        layers.append(block(num_layers, self.in_channels, intermediate_channels, identity_downsample, stride))
-        self.in_channels = intermediate_channels * self.expansion # 256
-        for i in range(num_residual_blocks - 1):
-            layers.append(block(num_layers, self.in_channels, intermediate_channels)) # 256 -> 64, 64*4 (256) again
-        return nn.Sequential(*layers)
 
 
 
@@ -482,45 +423,12 @@ class ResNet_MaskedDropout_GFFN(nn.Module):
         assert num_layers in [18, 34, 50, 101, 152], "ResNet: Unknown architecture! Number of layers has to be 18, 34, 50, 101, or 152 "
         if hidden is None:
             hidden = [32,32]
-        '''    
-        if hidden is None:
-            hidden = [32,32]
-        block = Block
-        if num_layers < 50:
-            self.expansion = 1
-        else:
-            self.expansion = 4
-        if num_layers == 18:
-            layers = [2, 2, 2, 2]
-        elif num_layers == 34 or num_layers == 50:
-            layers = [3, 4, 6, 3]
-        elif num_layers == 101:
-            layers = [3, 4, 23, 3]
-        else:
-            layers = [3, 8, 36, 3]
-        self.in_channels = 64
-        self.conv1 = nn.Conv2d(img_channels, 64, kernel_size=7, stride=2, padding=3)
-        self.bn1 = nn.BatchNorm2d(64)
-        self.relu = nn.ReLU()
-        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-
-        # ResNetLayers
-        self.layer1 = self.make_layers(num_layers, block, layers[0], intermediate_channels=64, stride=1)
-        self.layer2 = self.make_layers(num_layers, block, layers[1], intermediate_channels=128, stride=2)
-        self.layer3 = self.make_layers(num_layers, block, layers[2], intermediate_channels=256, stride=2)
-        self.layer4 = self.make_layers(num_layers, block, layers[3], intermediate_channels=512, stride=2)
-
-        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        self.CNNoutputsize = 512 * self.expansion
-        '''
+       
         
-        resnet18 = models.resnet18(pretrained=False)   #load resnet18 model
-        if img_channels==1:
-            resnet18.conv1 = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
-        self.CNNoutputsize = resnet18.fc.in_features #extract fc layers features
-        self.model= nn.Sequential(*list(resnet18.children())[:-1])
-        
-        h_old =self.CNNoutputsize
+        self.model = ResNet18(img_channels)   #load resnet18 model
+      
+  
+        h_old =self.model.get_last_in_features()
         self.fc = nn.ModuleList()
         for h in hidden:
             self.fc.append(nn.Linear(h_old,h))
@@ -532,18 +440,7 @@ class ResNet_MaskedDropout_GFFN(nn.Module):
        
 
     def forward(self, x,mask_generators):
-        '''
-        x = self.conv1(x)
-        x = self.bn1(x)
-        x = self.relu(x)
-        x = self.maxpool(x)
-        x = self.layer1(x)
-        x = self.layer2(x)
-        x = self.layer3(x)
-        x = self.layer4(x)
-        x = self.avgpool(x)
-        x = x.reshape(x.shape[0], -1)
-        '''
+       
         x = self.model(x)
         x = x.reshape(x.shape[0], -1)
         masks = []
@@ -559,18 +456,7 @@ class ResNet_MaskedDropout_GFFN(nn.Module):
 
     def forward_predifinedMask(self, x, mask):
         ###forward using predefined mask
-        '''
-        x = self.conv1(x)
-        x = self.bn1(x)
-        x = self.relu(x)
-        x = self.maxpool(x)
-        x = self.layer1(x)
-        x = self.layer2(x)
-        x = self.layer3(x)
-        x = self.layer4(x)
-        x = self.avgpool(x)
-        x = x.reshape(x.shape[0], -1)
-        '''
+       
         x = self.model(x)
         x = x.reshape(x.shape[0], -1)
         masks = []
@@ -583,16 +469,6 @@ class ResNet_MaskedDropout_GFFN(nn.Module):
         x = self.out_layer(x)
         return x, masks   
 
-    def make_layers(self, num_layers, block, num_residual_blocks, intermediate_channels, stride):
-        layers = []
-
-        identity_downsample = nn.Sequential(nn.Conv2d(self.in_channels, intermediate_channels*self.expansion, kernel_size=1, stride=stride),
-                                            nn.BatchNorm2d(intermediate_channels*self.expansion))
-        layers.append(block(num_layers, self.in_channels, intermediate_channels, identity_downsample, stride))
-        self.in_channels = intermediate_channels * self.expansion # 256
-        for i in range(num_residual_blocks - 1):
-            layers.append(block(num_layers, self.in_channels, intermediate_channels)) # 256 -> 64, 64*4 (256) again
-        return nn.Sequential(*layers)
 
 
 class RandomMaskGenerator(nn.Module):
@@ -744,19 +620,14 @@ class RESNETClassifierWithMaskGenerator(nn.Module):
                 hidden=mg_hidden,
                 activation=mg_activation,
             ).to(device)
-                    
-            ####total flow (logZ) should condition on input or previous layoutout
-            #self.logZ = nn.Parameter(torch.tensor(0.)).to(device)
-            
+        
             self.total_flowestimator = RESNET_GFFN(
                                     num_layers = num_layers,
                                     img_channels = img_channels,
                                     out_dim=1,
                                     activation=mg_activation).to(device)
                         
-            #param_list = [{'params': self.model.parameters(), 'lr': mg_lr},
-            #              {'params': self.logZ, 'lr': z_lr}]
-
+      
             MaskGeneratorParameters=[]
             for generator in self.mask_generators:
                 MaskGeneratorParameters+=list(generator.parameters())
@@ -783,14 +654,7 @@ class RESNETClassifierWithMaskGenerator(nn.Module):
         metric['acc'] = acc
         loss.backward()
         self.optimizer.step()
-
-        # Update mask generators
-        #if self.mg_type == 'gfn':
-        #    if x_valid is not None and y_valid is not None:
-        #        metric.update(self._gfn_step(x_valid, y_valid))
-        #    else:
-        #        metric.update(self._gfn_step(x, y))
-
+      
         return logits,metric
 
     def _gfn_step(self, x_mask, y_mask,x_reward,y_reward):
@@ -848,40 +712,10 @@ class ResNet_SVD(nn.Module):
     def __init__(self,num_layers,img_channels=3,hidden_size=10,droprates=0,threshold=3):
         super(ResNet_SVD, self).__init__()
         assert num_layers in [18, 34, 50, 101, 152], "ResNet: Unknown architecture! Number of layers has to be 18, 34, 50, 101, or 152 "
-        '''
-        block = Block
-        if num_layers < 50:
-            self.expansion = 1
-        else:
-            self.expansion = 4
-        if num_layers == 18:
-            layers = [2, 2, 2, 2]
-        elif num_layers == 34 or num_layers == 50:
-            layers = [3, 4, 6, 3]
-        elif num_layers == 101:
-            layers = [3, 4, 23, 3]
-        else:
-            layers = [3, 8, 36, 3]
-        self.in_channels = 64
-        self.conv1 = nn.Conv2d(img_channels, 64, kernel_size=7, stride=2, padding=3)
-        self.bn1 = nn.BatchNorm2d(64)
-        self.relu = nn.ReLU()
-        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+        
+        self.model = ResNet18(img_channels)   #load resnet18 model
+        self.CNNoutputsize =self.model.get_last_in_features()
 
-        # ResNetLayers
-        self.layer1 = self.make_layers(num_layers, block, layers[0], intermediate_channels=64, stride=1)
-        self.layer2 = self.make_layers(num_layers, block, layers[1], intermediate_channels=128, stride=2)
-        self.layer3 = self.make_layers(num_layers, block, layers[2], intermediate_channels=256, stride=2)
-        self.layer4 = self.make_layers(num_layers, block, layers[3], intermediate_channels=512, stride=2)
-
-        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        self.CNNoutputsize = 512 * self.expansion
-        '''
-        resnet18 = models.resnet18(pretrained=False)   #load resnet18 model
-        if img_channels==1:
-            resnet18.conv1 = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
-        self.CNNoutputsize = resnet18.fc.in_features #extract fc layers features
-        self.model= nn.Sequential(*list(resnet18.children())[:-1])
      
         self.fc1 = LinearSVDO(self.CNNoutputsize, hidden_size, threshold) 
         
@@ -892,35 +726,12 @@ class ResNet_SVD(nn.Module):
         self.DIY_Dropout=DIY_Dropout(droprates)###make it part of the model so it gets the train/eval state        
 
     def forward(self, x):
-        '''
-        x = self.conv1(x)
-        x = self.bn1(x)
-        x = self.relu(x)
-        x = self.maxpool(x)
-        x = self.layer1(x)
-        x = self.layer2(x)
-        x = self.layer3(x)
-        x = self.layer4(x)
-        x = self.avgpool(x)
-        x = x.reshape(x.shape[0], -1)
-        '''
+       
         x = self.model(x)
         x = x.reshape(x.shape[0], -1)
         x = F.relu(self.fc1(x))
         x= self.fc2(x)
         return x
-
-    def make_layers(self, num_layers, block, num_residual_blocks, intermediate_channels, stride):
-        layers = []
-
-        identity_downsample = nn.Sequential(nn.Conv2d(self.in_channels, intermediate_channels*self.expansion, kernel_size=1, stride=stride),
-                                            nn.BatchNorm2d(intermediate_channels*self.expansion))
-        layers.append(block(num_layers, self.in_channels, intermediate_channels, identity_downsample, stride))
-        self.in_channels = intermediate_channels * self.expansion # 256
-        for i in range(num_residual_blocks - 1):
-            layers.append(block(num_layers, self.in_channels, intermediate_channels)) # 256 -> 64, 64*4 (256) again
-        return nn.Sequential(*layers)
-
 
 
 
@@ -930,85 +741,25 @@ class ResNet_Standout(nn.Module):
     def __init__(self,num_layers,img_channels=3,hidden_size=10,droprates=0 ):
         super(ResNet_Standout, self).__init__()
         assert num_layers in [18, 34, 50, 101, 152], f'Unknown architecture! Number of layers has to be 18, 34, 50, 101, or 152'
-        '''
-        block = Block
-        if num_layers < 50:
-            self.expansion = 1
-        else:
-            self.expansion = 4
-        if num_layers == 18:
-            layers = [2, 2, 2, 2]
-        elif num_layers == 34 or num_layers == 50:
-            layers = [3, 4, 6, 3]
-        elif num_layers == 101:
-            layers = [3, 4, 23, 3]
-        else:
-            layers = [3, 8, 36, 3]
-        self.in_channels = 64
-        self.conv1 = nn.Conv2d(img_channels, 64, kernel_size=7, stride=2, padding=3)
-        self.bn1 = nn.BatchNorm2d(64)
-        self.relu = nn.ReLU()
-        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-
-        # ResNetLayers
-        self.layer1 = self.make_layers(num_layers, block, layers[0], intermediate_channels=64, stride=1)
-        self.layer2 = self.make_layers(num_layers, block, layers[1], intermediate_channels=128, stride=2)
-        self.layer3 = self.make_layers(num_layers, block, layers[2], intermediate_channels=256, stride=2)
-        self.layer4 = self.make_layers(num_layers, block, layers[3], intermediate_channels=512, stride=2)
-
-        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        '''
-        resnet18 = models.resnet18(pretrained=False)   #load resnet18 model
-        if img_channels==1:
-            resnet18.conv1 = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
-        self.CNNoutputsize = resnet18.fc.in_features #extract fc layers features
-        self.model= nn.Sequential(*list(resnet18.children())[:-1])
+        
+        self.model = ResNet18(img_channels)   #load resnet18 model
+        self.CNNoutputsize =self.model.get_last_in_features()
         self.fc1 = nn.Linear(self.CNNoutputsize, hidden_size)
-      
         self.fc1_drop = Standout(self.fc1, droprates, 1)
-
         self.fc2 = nn.Linear(hidden_size, 10)
-
         self.droprates=droprates
         
 
     def forward(self, x):
-        '''
-        x = self.conv1(x)
-        x = self.bn1(x)
-        x = self.relu(x)
-        x = self.maxpool(x)
-
-        x = self.layer1(x)
-        x = self.layer2(x)
-        x = self.layer3(x)
-        x = self.layer4(x)
-
-        x = self.avgpool(x)
-        x = x.reshape(x.shape[0], -1)
-        '''
         x = self.model(x)
         x = x.reshape(x.shape[0], -1)
-        
-
         previous = x
         x_relu = F.relu(self.fc1(x))
 
         x = self.fc1_drop(previous,x_relu)
         x= self.fc2(x)
         return x
-
-    def make_layers(self, num_layers, block, num_residual_blocks, intermediate_channels, stride):
-        layers = []
-
-        identity_downsample = nn.Sequential(nn.Conv2d(self.in_channels, intermediate_channels*self.expansion, kernel_size=1, stride=stride),
-                                            nn.BatchNorm2d(intermediate_channels*self.expansion))
-        layers.append(block(num_layers, self.in_channels, intermediate_channels, identity_downsample, stride))
-        self.in_channels = intermediate_channels * self.expansion # 256
-        for i in range(num_residual_blocks - 1):
-            layers.append(block(num_layers, self.in_channels, intermediate_channels)) # 256 -> 64, 64*4 (256) again
-        return nn.Sequential(*layers)
-
+  
 # ResNet with MaskedDropout like CNN_MaskedDropout()
 class ResNet_MaskedDropout(nn.Module):
    
@@ -1017,62 +768,15 @@ class ResNet_MaskedDropout(nn.Module):
                                                      f'to be 18, 34, 50, 101, or 152 '
         super(ResNet_MaskedDropout, self).__init__()
         
-        '''
-        block = Block
-        if num_layers < 50:
-            self.expansion = 1
-        else:
-            self.expansion = 4
-        if num_layers == 18:
-            layers = [2, 2, 2, 2]
-        elif num_layers == 34 or num_layers == 50:
-            layers = [3, 4, 6, 3]
-        elif num_layers == 101:
-            layers = [3, 4, 23, 3]
-        else:
-            layers = [3, 8, 36, 3]
-        self.in_channels = 64
-        self.conv1 = nn.Conv2d(img_channels, 64, kernel_size=7, stride=2, padding=3)
-        self.bn1 = nn.BatchNorm2d(64)
-        self.relu = nn.ReLU()
-        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-
-        # ResNetLayers
-        self.layer1 = self.make_layers(num_layers, block, layers[0], intermediate_channels=64, stride=1)
-        self.layer2 = self.make_layers(num_layers, block, layers[1], intermediate_channels=128, stride=2)
-        self.layer3 = self.make_layers(num_layers, block, layers[2], intermediate_channels=256, stride=2)
-        self.layer4 = self.make_layers(num_layers, block, layers[3], intermediate_channels=512, stride=2)
-
-        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        '''
-        resnet18 = models.resnet18(pretrained=False)   #load resnet18 model
-        if img_channels==1:
-            resnet18.conv1 = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
-        self.CNNoutputsize = resnet18.fc.in_features #extract fc layers features
-        self.model= nn.Sequential(*list(resnet18.children())[:-1])
-
+        self.model = ResNet18(img_channels)   #load resnet18 model
+        self.CNNoutputsize =self.model.get_last_in_features()
         self.fc1 = nn.Linear(self.CNNoutputsize, hidden_size)
         self.fc2 = nn.Linear(hidden_size,10)
-
         self.droprates=droprates
-
         self.Mask_Dropout=Mask_Dropout()###make it part of the model so it gets the train/eval state
 
     def forward(self, x,mask):
-        '''
-        x = self.conv1(x)
-        x = self.bn1(x)
-        x = self.relu(x)
-        x = self.maxpool(x)
-
-        x = self.layer1(x)
-        x = self.layer2(x)
-        x = self.layer3(x)
-        x = self.layer4(x)
-
-        x = self.avgpool(x)
-        x = x.reshape(x.shape[0], -1)
-        '''
+        
         x= self.model(x)
         x = F.relu(self.fc1(x))
         x=self.Mask_Dropout(x,mask)
@@ -1080,37 +784,13 @@ class ResNet_MaskedDropout(nn.Module):
         return x
 
     def Get_condition(self, x):
-        '''
-        x = self.conv1(x)
-        x = self.bn1(x)
-        x = self.relu(x)
-        x = self.maxpool(x)
-
-        x = self.layer1(x)
-        x = self.layer2(x)
-        x = self.layer3(x)
-        x = self.layer4(x)
-
-        x = self.avgpool(x)
-        x = x.reshape(x.shape[0], -1)
-        '''
+        
         x = self.model(x)
         x = x.reshape(x.shape[0], -1)
-        
         x = F.relu(self.fc1(x))
         
         return x    
 
-    def make_layers(self, num_layers, block, num_residual_blocks, intermediate_channels, stride):
-        layers = []
-
-        identity_downsample = nn.Sequential(nn.Conv2d(self.in_channels, intermediate_channels*self.expansion, kernel_size=1, stride=stride),
-                                            nn.BatchNorm2d(intermediate_channels*self.expansion))
-        layers.append(block(num_layers, self.in_channels, intermediate_channels, identity_downsample, stride))
-        self.in_channels = intermediate_channels * self.expansion # 256
-        for i in range(num_residual_blocks - 1):
-            layers.append(block(num_layers, self.in_channels, intermediate_channels)) # 256 -> 64, 64*4 (256) again
-        return nn.Sequential(*layers)
 
 
 # ResNet with DIY_Dropout, Like CNN()
@@ -1120,79 +800,23 @@ class ResNet(nn.Module):
         assert num_layers in [18, 34, 50, 101, 152], f'ResNet{num_layers}: Unknown architecture! Number of layers has ' \
                                                      f'to be 18, 34, 50, 101, or 152 '
         super(ResNet, self).__init__()
-        '''
-        block = Block
-        if num_layers < 50:
-            self.expansion = 1
-        else:
-            self.expansion = 4
-        if num_layers == 18:
-            layers = [2, 2, 2, 2]
-        elif num_layers == 34 or num_layers == 50:
-            layers = [3, 4, 6, 3]
-        elif num_layers == 101:
-            layers = [3, 4, 23, 3]
-        else:
-            layers = [3, 8, 36, 3]
-        self.in_channels = 64
-        self.conv1 = nn.Conv2d(img_channels, 64, kernel_size=7, stride=2, padding=3)
-        self.bn1 = nn.BatchNorm2d(64)
-        self.relu = nn.ReLU()
-        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+        self.img_channels = img_channels
+        self.model = ResNet18(img_channels)   #load resnet18 model
 
-        # ResNetLayers
-        self.layer1 = self.make_layers(num_layers, block, layers[0], intermediate_channels=64, stride=1)
-        self.layer2 = self.make_layers(num_layers, block, layers[1], intermediate_channels=128, stride=2)
-        self.layer3 = self.make_layers(num_layers, block, layers[2], intermediate_channels=256, stride=2)
-        self.layer4 = self.make_layers(num_layers, block, layers[3], intermediate_channels=512, stride=2)
-
-        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        '''
-        resnet18 = models.resnet18(pretrained=False)   #load resnet18 model
-        if img_channels==1:
-            resnet18.conv1 = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
-        self.CNNoutputsize = resnet18.fc.in_features #extract fc layers features
-        self.model= nn.Sequential(*list(resnet18.children())[:-1])
+        self.CNNoutputsize =self.model.get_last_in_features()
         self.fc1 = nn.Linear(self.CNNoutputsize, hidden_size)
         self.fc2 = nn.Linear(hidden_size,10)
-
         self.droprates=droprates
-
         self.DIY_Dropout=DIY_Dropout(droprates)###make it part of the model so it gets the train/eval state
 
     def forward(self, x):
-        '''
-        x = self.conv1(x)
-        x = self.bn1(x)
-        x = self.relu(x)
-        x = self.maxpool(x)
 
-        x = self.layer1(x)
-        x = self.layer2(x)
-        x = self.layer3(x)
-        x = self.layer4(x)
-
-        x = self.avgpool(x)
-        x = x.reshape(x.shape[0], -1)
-        '''
         x = self.model(x)
         x = x.reshape(x.shape[0], -1)
-       
         x = F.relu(self.fc1(x))
         x= self.DIY_Dropout(x)
         x= self.fc2(x)
         return x
-
-    def make_layers(self, num_layers, block, num_residual_blocks, intermediate_channels, stride):
-        layers = []
-
-        identity_downsample = nn.Sequential(nn.Conv2d(self.in_channels, intermediate_channels*self.expansion, kernel_size=1, stride=stride),
-                                            nn.BatchNorm2d(intermediate_channels*self.expansion))
-        layers.append(block(num_layers, self.in_channels, intermediate_channels, identity_downsample, stride))
-        self.in_channels = intermediate_channels * self.expansion # 256
-        for i in range(num_residual_blocks - 1):
-            layers.append(block(num_layers, self.in_channels, intermediate_channels)) # 256 -> 64, 64*4 (256) again
-        return nn.Sequential(*layers)
 
 
 if __name__ == "__main__":
@@ -1222,5 +846,3 @@ if __name__ == "__main__":
    
     res = ResNet_Standout(18)
     y = res(torch.randn(4, 3, 32, 32))
-    # print(y.size())
-    # torch.Size([4, 10])

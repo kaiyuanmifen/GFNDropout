@@ -37,7 +37,7 @@ DataRatio=$6
 
 seed=$7
 
-FOLDER='Results_Final_18_200'
+FOLDER='Results_Final_18_200Debug'
 
 
-python -m pdb Run_trainingDebug.py --Data $data --Method $method --Hidden_dim $dim --p $p --seed $seed --DataRatio $DataRatio --Epochs 200 --RewardType ${RewardType} --folder $FOLDER 
+python Run_training.py --Data $data --Method $method --Hidden_dim $dim --p $p --seed $seed --DataRatio $DataRatio --Epochs 600 --RewardType ${RewardType} --folder $FOLDER 

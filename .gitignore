@@ -7,3 +7,6 @@ checkpoints/
 .Rhistory
 Plot.Rout
 CIFAR-10-C/*
+
+Results_Final_18_200/
+Results_Final_18_600/

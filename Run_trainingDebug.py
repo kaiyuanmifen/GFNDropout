@@ -6,7 +6,7 @@ from GFN_SampleMask import GFN_SamplingMask
 from cifar10c import CIFAR_1O_Corrupted
 from GFNFunctions import *
 from Dropout_DIY import *
-from TaskModels import *
+from TaskModels_Pretrained import *
 import os
 
 import matplotlib.pyplot as plt

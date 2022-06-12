@@ -15,8 +15,8 @@ module load cuda/11.1
 
 
 # ############GFN based models
-declare -a all_data=("MNIST" "CIFAR10" "SVHN")
-#declare -a all_data=("CIFAR10")
+#declare -a all_data=("MNIST" "CIFAR10" "SVHN")
+declare -a all_data=("CIFAR10")
 
 #declare -a all_data=("CIFAR10" "MNIST" )
 

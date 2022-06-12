@@ -618,12 +618,10 @@ class MLPClassifier:
 							x_valid_augmented=torch.cat(x_valid_augmented,0)
 							time_for_forward = time.time()
 							total_time_valid_augment+=time_for_forward-time_to_get_valid
-							#import pdb;pdb.set_trace()
 							G_metric_batch = self.model._gfn_step(x_mask=x_valid, y_mask=y_valid ,x_reward=x_valid_augmented, y_reward=y_valid)
 							total_time_forward+=time.time()-time_for_forward
 							G_metric_batch_losses.append(G_metric_batch['tb_loss'])
 						G_metric['tb_loss'] = np.mean(G_metric_batch_losses)
-						#import pdb;pdb.set_trace()
 						print(f'Time: {time.time()-start_time}...')
 						print(f"Time in valid augment: {total_time_valid_augment}")
 						print(f"Time for forward pass in GNet: {total_time_forward}")
