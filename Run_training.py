@@ -3,7 +3,7 @@ from GFN_SampleMask import GFN_SamplingMask
 from cifar10c import CIFAR_1O_Corrupted
 from GFNFunctions import *
 from Dropout_DIY import *
-from TaskModels_Pretrained2 import *
+from TaskModels_Pretrained import *
 import os
 import matplotlib.pyplot as plt
 import matplotlib
@@ -357,7 +357,7 @@ if args.Data=="SVHN":
 #part 2 function to run the task
 
 class MLPClassifier:
-	def __init__(self, image_size,droprates=0.5,  max_epoch=10, \
+	def __init__(self, image_size,droprates=0.5,  max_epoch=600, \
 				 lr=0.001, momentum=0,model_type="MLP_nodropout",N_units=50):
 		# Wrap MLP model
 		self.droprates = droprates

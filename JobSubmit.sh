@@ -37,7 +37,7 @@ DataRatio=$6
 
 seed=$7
 
-FOLDER='Results_Final_18_600_2'
+FOLDER='Results_Final_18_600_2_CIFAR'
 
 
 python Run_training.py --Data $data --Method $method --Hidden_dim $dim --p $p --seed $seed --DataRatio $DataRatio --Epochs 600 --RewardType ${RewardType} --folder $FOLDER 

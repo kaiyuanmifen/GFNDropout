@@ -2,8 +2,8 @@
 
 
 # ############GFN based models
-declare -a all_data=("MNIST" "CIFAR10" "SVHN")
-#declare -a all_data=("CIFAR10")
+#declare -a all_data=("MNIST" "CIFAR10" "SVHN")
+declare -a all_data=("CIFAR10")
 
 #declare -a all_data=("MNIST")
 
@@ -20,7 +20,7 @@ declare -a all_methods=("RESNET_nodropout" "RESNET_Standout" "RESNET_dropout" "R
 declare -a all_dim=(1024)
 
 #declare -a all_p=(0.1 0.2 0.5 0.7 0.9)
-declare -a all_p=(0.5)
+declare -a all_p=(0.2)
 
 
 declare -a RewardTypes=(2)
@@ -51,7 +51,7 @@ do
 						for round in "${all_rounds[@]}"
 						do
 
-							sbatch JobSubmit.sh $data $method $dim $p $RewardType $DataRatio $round	
+							bash JobSubmit.sh $data $method $dim $p $RewardType $DataRatio $round	
 						done
 					done
 				done
