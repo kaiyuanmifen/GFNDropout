@@ -9,11 +9,9 @@ declare -a all_data=("CIFAR10")
 
 #declare -a all_data=("CIFAR10")
 
-declare -a all_methods=("RESNET_nodropout" "RESNET_Standout" "RESNET_dropout" "RESNET_SVD" "RESNET_GFFN")
-
 #declare -a all_methods=("RESNET_GFFN" "RESNET_nodropout" "RESNET_StandoutAll" "RESNET_dropoutAll" "RESNET_SVDAll")
 #declare -a all_methods=("RESNET_GFFN")
-#declare -a all_methods=("RESNET_GFFN" "RESNET_dropout")
+declare -a all_methods=("RESNET_GFFN")
 
 #declare -a all_methods=("RESNET_GFFN" "RESNET_nodropout" "RESNET_StandoutAll" "RESNET_dropoutAll" "RESNET_SVDAll")
 
@@ -27,7 +25,7 @@ declare -a RewardTypes=(2)
 #declare -a RewardTypes=(0)
 
 
-declare -a All_DataRatio=(1)
+declare -a All_DataRatio=(0.1)
 
 
 declare -a all_rounds=(1) 

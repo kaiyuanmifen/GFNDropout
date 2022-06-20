@@ -1,6 +1,6 @@
 
 
-AllFiles=list.files('Results_All_Best/')
+AllFiles=list.files('Results/')
 
 AllFiles=AllFiles[grepl(AllFiles,pattern = "csv")]
 
@@ -9,7 +9,7 @@ Data=NULL
 
 for (File in AllFiles){
 
-  Vec=read.csv(paste0("Results_All_Best/",File))
+  Vec=read.csv(paste0("Results/",File))
   names(Vec)[1]="Epoch"
 
   Infor=strsplit(File,split = "_")[[1]]
@@ -52,13 +52,12 @@ head(Data)
 for (Model in c("RESNET")){
   for (DataNames in c("SVHN", "CIFAR10","MNIST")){
     for (N_units in c(1024)){
-      for (p in c(0.1,0.2,0.5,0.7,0.9)){
+      for (p in c(0.5)){
           for (beta in c(1.0)){
         for (OODReward in c(1,0)){
           for (seed in c(1)){
-#Task_name=args.Method+"_"+args.Data+"_"+str(args.Hidden_dim)+"_"+str(args.p)+"_"+str(args.beta)+"_"+str(args.RewardType)+"_"+str(args.DataRatio)+"_"+str(args.seed)
 
-Exp=paste0(Model,"_",DataNames,"_",N_units,"_",p,"_",beta,"_2_1.0","_",seed)
+Exp=paste0(Model,"_",DataNames,"_",N_units,"_",p,"_",beta,"_",OODReward,"_",seed)
           
 VecPlot1=Data[(Data$Data==DataNames)&(Data$Method%in%paste0(Model,c("_GFNDB","_GFNFM","_GFFN")))&(Data$N_units==N_units)&(Data$p==p)&(Data$OODReward==OODReward),]
 VecPlot2=Data[(Data$Data==DataNames)&(Data$Method%in%paste0(Model,c("_dropout","_Standout")))&(Data$N_units==N_units)&(Data$p==p),]
@@ -77,7 +76,7 @@ Plot <- ggplot(VecPlot, aes(x=Epoch, y=test_acc,color=Method)) +geom_line()+
   ggtitle(DataNames)
 
 
-ggsave(plot = Plot,paste0('images_All_Best_101/',Exp,"_testacc.png"),scale=3)
+ggsave(plot = Plot,paste0('images/',Exp,"_testacc.png"),scale=3)
 
 
 head(VecPlot)
@@ -85,7 +84,7 @@ Plot <- ggplot(VecPlot, aes(x=Epoch, y=test_acc_OOD,color=Method)) +geom_line()+
   ggtitle(DataNames)
 
 
-ggsave(plot = Plot,paste0('images_All_Best_101/',Exp,"_testaccOOD.png"),scale=3)
+ggsave(plot = Plot,paste0('images/',Exp,"_testaccOOD.png"),scale=3)
         }
 
       }

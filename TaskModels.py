@@ -1,5 +1,7 @@
 
+import torch
 import numpy as np
+import torch.nn.functional as F
 import torch
 from torch.autograd import Variable
 import torch.nn as nn
@@ -568,6 +570,7 @@ class RandomMaskGenerator(nn.Module):
         super().__init__()
         self.dropout_rate = torch.tensor(dropout_rate).type(torch.float32)
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        #self.device = torch.device('cpu')
     def forward(self, x):
         return torch.bernoulli((1. - self.dropout_rate) * torch.ones(x.shape))
 

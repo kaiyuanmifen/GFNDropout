@@ -3,8 +3,8 @@
 #SBATCH --gres=gpu:1             # Number of GPUs (per node)
 #SBATCH --mem=85GB               # memory (per node)
 #SBATCH --time=2-5:50            # time (DD-HH:MM)
-#SBATCH --error=/home/mila/c/chris.emezue/GFNDropout/slurmerror_gfn_dropout.txt
-#SBATCH --output=/home/mila/c/chris.emezue/GFNDropout/slurmoutput_gfn_dropout.txt
+#SBATCH --error=/home/mila/c/chris.emezue/GFNDropout/slurmerror_gfn_baseline.txt
+#SBATCH --output=/home/mila/c/chris.emezue/GFNDropout/slurmoutput_gfn_baseline.txt
 
 ###########cluster information above this line
 
