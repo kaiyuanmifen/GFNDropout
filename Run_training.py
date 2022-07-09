@@ -666,8 +666,7 @@ class MLPClassifier:
 					
 					GFN_loss=self.GFN_operation.DB_train(rewards,self.optimizer_GFN)
 				elif "GFFN" in self.model_type:
-					GFN_loss=G_metric['tb_loss']
-					
+					GFN_loss=G_metric
 
 			self.loss_.append(running_loss / len(trainloader))
 			if verbose and epoch%1==0:

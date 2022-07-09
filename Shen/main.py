@@ -6,7 +6,6 @@ from torch import nn
 import torch.nn.functional as F
 from tqdm import tqdm
 import argparse
-
 from model import MLPClassifierWithMaskGenerator
 from logger import Logger
 
@@ -65,7 +64,9 @@ for epoch in range(300):
             logger.add_metric('train_{}'.format(k), metric[k])
     for data in tqdm(testloader):
         x, y = data
-        metric = model.test(x.reshape((-1, 784)), y)
+        metric,masks = model.test(x.reshape((-1, 784)), y)
         for k in metric.keys():
             logger.add_metric('test_{}'.format(k), metric[k])
+
+
     logger.commit(epoch=epoch, step=epoch * len(trainloader))

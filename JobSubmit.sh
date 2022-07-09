@@ -1,8 +1,8 @@
 #!/bin/bash
-#SBATCH --job-name=dropout_train
-#SBATCH --gres=gpu:1             # Number of GPUs (per node)
-#SBATCH --mem=55G               # memory (per node)
-#SBATCH --time=0-4:50            # time (DD-HH:MM)
+#SBATCH --job-name=dropout_gater
+#SBATCH --gres=gpu:1              # Number of GPUs (per node)
+#SBATCH --mem=75G               # memory (per node)
+#SBATCH --time=0-7:50            # time (DD-HH:MM)
 
 ###########cluster information above this line
 
@@ -34,4 +34,4 @@ DataRatio=$6
 seed=$7
 
 
-python Run_training.py --Data $data --Method $method --Hidden_dim $dim --p $p --seed $seed --DataRatio $DataRatio --Epochs 50 --RewardType ${RewardType}
+python Run_training.py --Data $data --Method $method --Hidden_dim $dim --p $p --seed $seed --DataRatio $DataRatio --Epochs 400 --RewardType ${RewardType}

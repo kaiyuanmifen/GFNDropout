@@ -484,10 +484,13 @@ class MLPMaskGenerator(nn.Module):
 
     def _dist(self, x):
         x = self.mlp(x)
- 
+
         x = torch.sigmoid(x)
-        dist = (1. - self.dropout_rate) * self.num_unit * x / (x.sum(1).unsqueeze(1) + 1e-6)
-        dist = dist.clamp(0, 1)
+    
+        # dist = (1. - self.dropout_rate) * self.num_unit * x / (x.sum(1).unsqueeze(1) + 1e-6)
+        #dist = dist.clamp(0, 1)
+        dist=x
+
         return dist
 
     def forward(self, x):
@@ -628,6 +631,7 @@ class MLPClassifierWithMaskGenerator(nn.Module):
         #     else:
         #         metric.update(self._gfn_step(x, y,x,y))
 
+
         return logits,metric
 
     def _gfn_step(self, x_mask, y_mask,x_reward,y_reward):
@@ -658,6 +662,15 @@ class MLPClassifierWithMaskGenerator(nn.Module):
         self.mg_optimizer.zero_grad()
         tb_loss.backward()
         self.mg_optimizer.step()
+
+
+        ###calculated actual droppout rate
+        actual_dropout_rate=0
+        for m in masks:
+            actual_dropout_rate+=m.sum(1).mean(0)/(m.shape[1]) 
+        metric['actual_dropout_rate']=(actual_dropout_rate/len(masks)).item()
+
+
 
         return metric
 
