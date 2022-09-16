@@ -9,7 +9,7 @@ from six.moves import cPickle
 
 epsilon = 1e-10
 
-
+device=torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 class ARMDense(nn.Module):
     def __init__(self, in_features, out_features, bias=True, weight_decay=1e-4, lamba=0.001, droprate_init=.5,
                  local_rep=False,opt=None, **kwargs):
@@ -358,7 +358,7 @@ class ARMDense(nn.Module):
                         if self.opt.concretedp:
                             self.post_nll_true = - (z * torch.log(pi + epsilon) + (1 - z) * torch.log(1 - pi + epsilon))
                             self.post_nll_true = self.post_nll_true.mean(1)
-                            prior_pi = torch.sigmoid(self.opt.k * self.eta.unsqueeze(0))
+                            prior_pi = torch.sigmoid(self.opt.k * self.eta.unsqueeze(0)).to(device)
                             self.prior_nll_true = - (
                                     z * torch.log(prior_pi + epsilon) + (1 - z) * torch.log(1 - prior_pi + epsilon))
                             self.prior_nll_true = self.prior_nll_true.mean(1)

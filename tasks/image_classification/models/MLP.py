@@ -9,7 +9,7 @@ import numpy as np
 
 epsilon = 1e-7
 class ARMMLP(nn.Module):
-    def __init__(self, input_dim=784, num_classes=10, N=60000, layer_dims=(32, 32), beta_ema=0.999,
+    def __init__(self, input_dim=784, num_classes=10, N=60000, layer_dims=(1024, 1024,1024), beta_ema=0.999,
                  weight_decay=5e-4, lambas=(.1, .1, .1), local_rep=True,opt=None):
         super(ARMMLP, self).__init__()
 

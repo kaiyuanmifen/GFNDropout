@@ -2,7 +2,7 @@
 #SBATCH --job-name=contextual
 #SBATCH --gres=gpu:1               # Number of GPUs (per node)
 #SBATCH --mem=65G               # memory (per node)
-#SBATCH --time=0-3:50            # time (DD-HH:MM)
+#SBATCH --time=0-2:59            # time (DD-HH:MM)
 
 ###########cluster information above this line
 
@@ -32,7 +32,8 @@ python -u ../image_classification/main.py train \
 										--fixdistrdp False \
 										--ctype "Bernoulli" \
 										--dropout_distribution 'bernoulli' \
-										--model_name "_MNIST_ARMMLP_Contextual"
+										--model_name "_MNIST_ARMMLP_Contextual" \
+										--max_epoch 200 \
 
 
 # python ../image_classification/main.py train \

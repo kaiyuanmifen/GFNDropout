@@ -1,8 +1,8 @@
 #!/bin/bash
 #SBATCH --job-name=MLP
 #SBATCH --gres=gpu:1               # Number of GPUs (per node)
-#SBATCH --mem=45G               # memory (per node)
-#SBATCH --time=0-1:59            # time (DD-HH:MM)
+#SBATCH --mem=65G               # memory (per node)
+#SBATCH --time=0-2:59            # time (DD-HH:MM)
 
 ###########cluster information above this line
 
@@ -19,10 +19,10 @@ conda activate GFlownets
 ###pretraining
 #python Pretrain_MNIST.py --name "MNIST_Suprise"
 
+
 python -u ../image_classification/main.py train \
 										--model=MLP_GFN \
 										--GFN_dropout True \
-										--dropout_rate 0.5 \
 										--dataset=mnist \
 										--lambas='[.0,.0,.0,.0]' \
 										--optimizer=adam \
@@ -33,10 +33,12 @@ python -u ../image_classification/main.py train \
 										--fixdistrdp False \
 										--ctype "Bernoulli" \
 										--dropout_distribution 'bernoulli' \
-										--mask "topdown" \
-										--BNN True \
+										--mask "upNdown" \
+										--BNN False \
 										--model_name "_MNIST_MLP_GFN" \
+										--beta 1 \
 										--max_epoch 200 \
+										--mlp_dr 0.9 \
 										#--start_model "../../checkpoints/MLP_GFN_MNIST_MLP_GFN_both_NN_base" \
 										
 

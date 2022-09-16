@@ -60,6 +60,7 @@ class DefaultConfig:
     augment_test=False
     mask="topdown"
     BNN=False
+    beta=1.0
 
     seed = None
     use_gpu = False
@@ -75,8 +76,8 @@ class DefaultConfig:
     use_t_in_training = False
     lenet_dr = 0.5
     #mlp_dr = 0.5
-    mlp_dr = 0.2
-    wrn_dr = 0.2
+    mlp_dr = 0.5
+    wrn_dr = 0.5
     gpus = 1
     note = ''
     verbose = True

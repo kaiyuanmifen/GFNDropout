@@ -34,7 +34,7 @@ conda activate GFlownets
 										--ctype "Bernoulli" \
 										--dropout_distribution 'bernoulli' \
 										--model_name "_CIFAR_ResNet_GFN" \
-										--mask "topdown" \
+										--mask "random" \
 										--BNN False \
 										--max_epoch 200 \
 										#--start_model "../../checkpoints/ARMWideResNet_GFN_CIFAR_ARMWideResNet_GFN_both_NN_base" \

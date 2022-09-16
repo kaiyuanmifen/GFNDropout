@@ -8,11 +8,12 @@ import numpy as np
 
 import torch.optim as optim
 import torchbnn as bnn
+import random
 
 epsilon = 1e-7
 device=torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 class MLP_GFN(nn.Module):
-	def __init__(self, input_dim=784, num_classes=10, N=60000, layer_dims=(32,32),
+	def __init__(self, input_dim=784, num_classes=10, N=60000, layer_dims=(1024,1024,1024),
 				weight_decay=5e-4, lambas=(.1, .1, .1),
 				 activation=nn.LeakyReLU,opt=None):
 		super(MLP_GFN, self).__init__()
@@ -28,6 +29,10 @@ class MLP_GFN(nn.Module):
 		self.lambas = lambas#placeholder
 		self.epoch = 0#placeholder
 		self.elbo = torch.zeros(1)#placeholder
+		
+		#the chance of generating random mask and temperature can be used together 
+		self.random_chance=0.1 #chances of using random mask during traning
+		self.temperature=2 # temperature in sigmoid , high temperature more close the p to 0.5 for binary mask
 
 		h_old = input_dim
 		self.fc = nn.ModuleList()
@@ -60,21 +65,21 @@ class MLP_GFN(nn.Module):
 
 		self.rand_mask_generator=RandomMaskGenerator(dropout_rate=opt.mlp_dr)
 
-		hiddens=[32,32]
+
 		self.p_zx_mask_generators=construct_conditional_mask_generators(layer_dims=layer_dims,
 														additional_input_dims=[0 for j in layer_dims],
-														hiddens=hiddens).to(device)#p(z|x)
+														hiddens=[32,32]).to(device)#p(z|x)
 
-		self.q_zxy_mask_generators=construct_conditional_mask_generators(layer_dims=layer_dims,
+		self.q_zxy_mask_generators=construct_multiinput_conditional_mask_generators(layer_dims=layer_dims,
 														additional_input_dims=[num_classes for j in layer_dims],
-														hiddens=hiddens).to(device)#q(z|x,y) 
+														hiddens=[32,32]).to(device)#q(z|x,y) 
 
 	
 		self.p_z_mask_generators=construct_unconditional_mask_generators(layer_dims=layer_dims,
-														hiddens=hiddens).to(device)#p(z)
+														hiddens=[32,32]).to(device)#p(z) use small capacity to regularize q_z
 
 		self.q_z_mask_generators=construct_unconditional_mask_generators(layer_dims=layer_dims,
-														hiddens=hiddens).to(device)#q(z)
+														hiddens=[32,32]).to(device)#q(z)
 
 
 
@@ -98,7 +103,7 @@ class MLP_GFN(nn.Module):
 		mg_lr_z=1e-3
 		mg_lr_mu=1e-3
 		lr=opt.lr
-		self.beta=1 #temperature on rewards
+		self.beta=self.opt.beta #temperature on rewards
 
 
 		
@@ -106,7 +111,7 @@ class MLP_GFN(nn.Module):
 		self.p_z_optimizer = optim.Adam(p_z_param_list)
 	   
 		q_z_param_list = [{'params': self.q_z_mask_generators.parameters(), 'lr': mg_lr_mu,"weight_decay":0.1},
-							{'params': self.LogZ_total_flowestimator.parameters(), 'lr': z_lr,"weight_decay":0.1}]
+							{'params': self.LogZ_unconditional, 'lr': z_lr,"weight_decay":0.1}]
 		self.q_z_optimizer = optim.Adam(q_z_param_list)
 
 
@@ -114,7 +119,7 @@ class MLP_GFN(nn.Module):
 		self.p_zx_optimizer = optim.Adam(p_zx_param_list)
 	   
 		q_zxy_param_list = [{'params': self.q_zxy_mask_generators.parameters(), 'lr': mg_lr_mu,"weight_decay":0.1},
-							{'params': self.LogZ_unconditional, 'lr': z_lr,"weight_decay":0.1}]
+							{'params': self.LogZ_total_flowestimator.parameters(), 'lr': z_lr,"weight_decay":0.1}]
 		self.q_zxy_optimizer = optim.Adam(q_zxy_param_list)
 
 
@@ -150,7 +155,7 @@ class MLP_GFN(nn.Module):
 		x=x.view(-1, self.input_dim)
 		
 		if self.training:
-			logits,actual_masks,masks_qz,masks_qzxy,LogZ_unconditional,LogPF_qz,LogR_qz,LogPB_qz,LogPF_BNN,LogZ_conditional,LogPF_qzxy,LogR_qzxy,LogPB_qzxy,Log_pzx,Log_pz =self.GFN_forward(x,y,mask)
+			logits,actual_masks,masks_qz,masks_conditional,LogZ_unconditional,LogPF_qz,LogR_qz,LogPB_qz,LogPF_BNN,LogZ_conditional,LogPF_qzxy,LogR_qzxy,LogPB_qzxy,Log_pzx,Log_pz =self.GFN_forward(x,y,mask)
 
 		else:
 
@@ -158,7 +163,7 @@ class MLP_GFN(nn.Module):
 			N_repeats=1#sample multiple times and use average as inference prediciton because GFN cannot take expection easily
 			logits=[]
 			for _ in range(N_repeats):
-				logits_,actual_masks,masks_qz,masks_qzxy,LogZ_unconditional,LogPF_qz,LogR_qz,LogPB_qz,LogPF_BNN,LogZ_conditional,LogPF_qzxy,LogR_qzxy,LogPB_qzxy,Log_pzx,Log_pz =self.GFN_forward(x,y,mask)
+				logits_,actual_masks,masks_qz,masks_conditional,LogZ_unconditional,LogPF_qz,LogR_qz,LogPB_qz,LogPF_BNN,LogZ_conditional,LogPF_qzxy,LogR_qzxy,LogPB_qzxy,Log_pzx,Log_pz =self.GFN_forward(x,y,mask)
 				logits.append(logits_.unsqueeze(2))
 			logits=torch.logsumexp(torch.cat(logits,2),2) 
 			
@@ -211,14 +216,18 @@ class MLP_GFN(nn.Module):
 		#initialize masks as all zeros(dropout them all)
 		#one batch share the same mu mask
 
-		
+		if self.train:#use tempered version of the policy q(z) or q(z|x,y) during training
+			temperature=self.temperature
+		else:
+			temperature=1.0
+
 		masks_qz=[[] for _ in range(len(self.fc))]
 		
 		for layer_idx in range(len(self.fc)):
 
-			if "topdown" in mask:
+			if "topdown" in mask or "upNdown" in mask:
 				if layer_idx==0:
-					qz_mask_l,qz_p_l=self.q_z_mask_generators[layer_idx](torch.zeros(batch_size,input_dim).to(device))      
+					qz_mask_l,qz_p_l=self.q_z_mask_generators[layer_idx](torch.zeros(batch_size,input_dim).to(device),temperature)      
 					
 				else:
 					##concatenate all previous masks
@@ -226,7 +235,7 @@ class MLP_GFN(nn.Module):
 					for j in range(layer_idx):
 						previous_mask.append(masks_qz[j][-1])
 					previous_mask=torch.cat(previous_mask,1)
-					qz_mask_l,qz_p_l=self.q_z_mask_generators[layer_idx](previous_mask)
+					qz_mask_l,qz_p_l=self.q_z_mask_generators[layer_idx](previous_mask,temperature)
 				
 				masks_qz[layer_idx].append(qz_mask_l.detach().clone())
 				
@@ -243,7 +252,7 @@ class MLP_GFN(nn.Module):
 		forward pass
 		'''
 		actual_masks=[]
-		masks_qzxy=[]
+		masks_conditional=[]
 		for layer_idx in range(len(self.fc)):
 			layer=self.fc[layer_idx]
 		
@@ -279,51 +288,69 @@ class MLP_GFN(nn.Module):
 
 
 			#####different masks generator
-			if "bottomup" in mask:
-				if layer_idx==0:
-					m_qzxy_l,qzxy_p_l= self.q_zxy_mask_generators[layer_idx](torch.cat([x.clone().detach(),y.clone().detach()],1))#generate mask based on activation from previous layer, detach from BNN training
-					
+			if "bottomup" in mask or "upNdown" in mask:
+
+				if self.train:
+					#during training use q(z|x,y;phi) to sample mask
+					if layer_idx==0:
+
+						m_conditional_l,qzxy_p_l= self.q_zxy_mask_generators[layer_idx](torch.zeros(batch_size,x.shape[1]).to(device),x.clone().detach(),y.float().clone().detach(),temperature)#generate mask based on activation from previous layer, detach from BNN training
+						
+						
+					else:
+						previous_actual_mask=[]#use previous actual masks
+						for j in range(layer_idx):
+							previous_actual_mask.append(actual_masks[j])
+						previous_actual_mask=torch.cat(previous_actual_mask,1)
+						
+						m_conditional_l,qzxy_p_l = self.q_zxy_mask_generators[layer_idx](previous_actual_mask,x.clone().detach(),y.float().clone().detach(),temperature)
+			
+
+					masks_conditional.append(m_conditional_l)
+
+					###add log P_F_Z to the GFN loss
+
+					LogPF_qzxy+=(m_conditional_l*torch.log(qzxy_p_l)+(1-m_conditional_l)*torch.log(1-qzxy_p_l)).sum(1)
+
+					LogPB_qzxy-=0
 				
+
 				else:
-					previous_actual_mask=[]#use previous actual masks
-					for j in range(layer_idx):
-						previous_actual_mask.append(actual_masks[j])
-					input_qzxy=previous_actual_mask
-					input_qzxy.append(x.clone().detach())
-					input_qzxy.append(y.clone().detach())
-					input_qzxy=torch.cat(input_qzxy,1)
-					m_qzxy_l,qzxy_p_l = self.q_zxy_mask_generators[layer_idx](input_qzxy)
-		
+					#during inference use p(z|x;xi) to sample mask
+						if layer_idx==0:
+							m_conditional_l,_= Log_P_zx_l = self.p_zx_mask_generators[layer_idx](x.clone().detach())
+						else:
+							previous_actual_mask=[]#use previous actual masks
+							for j in range(layer_idx):
+								previous_actual_mask.append(actual_masks[j])
 
-				masks_qzxy.append(m_qzxy_l)
+							###calculate p(z|x;xi)
+							input_pzx=torch.cat(previous_actual_mask+[x.clone().detach()],1)
 
-				###add log P_F_Z to the GFN loss
+							m_conditional_l,_= self.p_zx_mask_generators[layer_idx](input_pzx)#generate mask based on activation from previous layer, detach from BNN training
 
-				LogPF_qzxy+=(m_qzxy_l*torch.log(qzxy_p_l)+(1-m_qzxy_l)*torch.log(1-qzxy_p_l)).sum(1)
 
-				LogPB_qzxy-=0
+						masks_conditional.append(m_conditional_l)
+
 			else:
-				masks_qzxy.append(torch.ones(x.shape).to(device))
-
+					masks_conditional.append(torch.ones(x.shape).to(device))
 
 				
 
 
 
+			EPSILON=random.uniform(0,1)
 
-			if mask=="topdown":
+			if mask=="random" or (EPSILON<self.random_chance and self.training):# during training ,of a centain chance a random policy will be used to explore the space
+				
+				m=self.rand_mask_generator(x).to(device)
+
+			elif mask=="topdown":
 				m_qz_l=masks_qz[layer_idx][-1]  
 				m=m_qz_l
-			elif mask=="bottomup":   
-				m=m_qzxy_l
+			elif mask=="bottomup" or mask=="upNdown":   
+				m=m_conditional_l
 
-
-			elif mask=="both":
-				m_qz_l=masks_qz[layer_idx][-1]  
-				m=m_qz_l*m_qzxy_l
-
-			elif mask=="random":
-				m=self.rand_mask_generator(x).to(device)
 
 			elif mask=="none":
 				m=torch.ones(x.shape).to(device)
@@ -396,7 +423,7 @@ class MLP_GFN(nn.Module):
 	 
 
  
-		return logits,actual_masks,masks_qz,masks_qzxy,LogZ_unconditional,LogPF_qz,LogR_qz,LogPB_qz,LogPF_BNN,LogZ_conditional,LogPF_qzxy,LogR_qzxy,LogPB_qzxy,Log_pzx,Log_pz
+		return logits,actual_masks,masks_qz,masks_conditional,LogZ_unconditional,LogPF_qz,LogR_qz,LogPB_qz,LogPF_BNN,LogZ_conditional,LogPF_qzxy,LogR_qzxy,LogPB_qzxy,Log_pzx,Log_pz
 
 
 
@@ -405,7 +432,7 @@ class MLP_GFN(nn.Module):
 
  
 		metric = {}
-		logits,actual_masks,masks_qz,masks_qzxy,LogZ_unconditional,LogPF_qz,LogR_qz,LogPB_qz,LogPF_BNN,LogZ_conditional,LogPF_qzxy,LogR_qzxy,LogPB_qzxy,Log_pzx,Log_pz = self.GFN_forward(x,y,mask)
+		logits,actual_masks,masks_qz,masks_conditional,LogZ_unconditional,LogPF_qz,LogR_qz,LogPB_qz,LogPF_BNN,LogZ_conditional,LogPF_qzxy,LogR_qzxy,LogPB_qzxy,Log_pzx,Log_pz = self.GFN_forward(x,y,mask)
 		
 		#loss calculation
 		#CEloss = F.nll_loss(logits, y)
@@ -413,13 +440,20 @@ class MLP_GFN(nn.Module):
 		CEloss = nn.CrossEntropyLoss(reduction='none')(logits, y)
 		LL=-CEloss
 		
-		
+		print("self.beta",self.beta)
 
 
-		GFN_loss_unconditional=(LogZ_unconditional+LogPF_qz-self.beta*self.N*LL.detach().clone()-Log_pz.detach().clone()-LogPB_qz)**2#+kl_weight*kl#jointly train the last layer BNN and the mask generator
+		LogR_unconditional=self.beta*self.N*LL.detach().clone()+Log_pz.detach().clone()
+		GFN_loss_unconditional=(LogZ_unconditional+LogPF_qz-LogR_unconditional-LogPB_qz)**2#+kl_weight*kl#jointly train the last layer BNN and the mask generator
 		
-		GFN_loss_conditional=(LogZ_conditional+LogPF_qzxy-self.beta*LL.detach().clone()-Log_pzx.detach().clone()-LogPB_qzxy)**2#+kl_weight*kl#jointly train the last layer BNN and the mask generator
+		LogR_conditional=LL.detach().clone()+Log_pzx.detach().clone()
+		GFN_loss_conditional=(LogZ_conditional+LogPF_qzxy-LogR_conditional-LogPB_qzxy)**2#+kl_weight*kl#jointly train the last layer BNN and the mask generator
 		
+		#LogR_upNdown=self.beta*self.N*(LL.detach().clone()+Log_pzx.detach().clone())+Log_pz.detach().clone()
+		LogR_upNdown=self.beta*(LL.detach().clone()+Log_pzx.detach().clone()+Log_pz.detach().clone())
+		GFN_loss_upNdown=(LogZ_conditional+LogPF_qzxy-LogR_upNdown-LogPB_qzxy)**2#+kl_weight*kl#jointly train the last layer BNN and the mask generator
+		
+
 		# Update model
 
 		acc = (torch.argmax(logits, dim=1) == y).sum().item() / len(y)
@@ -433,6 +467,13 @@ class MLP_GFN(nn.Module):
 		
 		metric['acc'] = acc
 
+		COR_qz=np.corrcoef(LogPF_qz.cpu().detach().numpy(),LogR_unconditional.cpu().detach().numpy())[0,1]
+		
+		metric['COR_qz'] =COR_qz
+
+		COR_qzxy=np.corrcoef(LogPF_qzxy.cpu().detach().numpy(),LogR_conditional.cpu().detach().numpy())[0,1]
+		
+		metric['COR_qzxy'] =COR_qzxy
 
 		if mask=="topdown":
 
@@ -541,9 +582,73 @@ class MLP_GFN(nn.Module):
 
 				self.p_zx_optimizer.step()
 
+		if mask=="upNdown":
+
+				#train  q(z|x,y) and logZ by GFN loss
+				self.q_zxy_optimizer.zero_grad()
+
+				GFN_loss_upNdown.mean().backward(retain_graph=True)
+
+				
+				#train task model by maximizing ELBO
+				if self.opt.BNN==True:
+
+					#a different equation if using BNN
+					
+					kl_loss = bnn.BKLLoss(reduction='mean', last_layer_only=False)
+
+					kl_1 = kl_loss(self.fc)
+
+					kl_2 = kl_loss(self.out_layer)
+
+					kl=kl_1+kl_2
+
+					metric['kl_loss']=(kl).item()
+
+					taskmodel_loss=kl+self.N*CEloss+self.N*(LogPF_qzxy-Log_pzx)#loss BNN, in real practice detach BNN and qzxy,pzx trainng
+
+					self.taskmodel_optimizer.zero_grad()
+
+					taskmodel_loss.mean().backward(retain_graph=True)
+					
+					#self.taskmodel_optimizer.step()
+
+				else:
+
+					self.taskmodel_optimizer.zero_grad()
+
+					taskmodel_loss=self.N*CEloss
+					taskmodel_loss.mean().backward(retain_graph=True)
+
+					#self.taskmodel_optimizer.step()
 
 
-		if mask=="random":
+				##train p(z|x) by maximize EBLO
+
+				self.p_zx_optimizer.zero_grad()
+
+				pzx_loss=-self.N*Log_pzx
+				pzx_loss.mean().backward(retain_graph=True)
+
+
+
+				###train p(z)
+				self.p_z_optimizer.zero_grad()
+
+				pz_loss=-Log_pz
+				pz_loss.mean().backward(retain_graph=True)		
+
+
+
+				self.taskmodel_optimizer.step()
+
+				self.q_zxy_optimizer.step()
+
+				self.p_zx_optimizer.step()
+
+				self.p_z_optimizer.step()
+
+		if mask=="random" or mask=="none":
 
 				self.taskmodel_optimizer.zero_grad()
 
@@ -570,13 +675,15 @@ class MLP_GFN(nn.Module):
 
 
 		#differnet terms of TB
-		metric['LogZ_unconditional']=LogZ_conditional.mean().item()
+		metric['LogZ_unconditional']=LogZ_unconditional.mean().item()
 		
 		metric['LogPF_qz']=LogPF_qz.mean().item()
 
 		metric['LogR_qz']=LogR_qz.mean().item()
 		
 		metric['LogPB_qz']=LogPB_qz.mean().item()
+
+		metric['Log_pz']=Log_pz.mean().item()
 
 
 		metric['LogZ_conditional']=LogZ_conditional.mean().item()
@@ -586,6 +693,8 @@ class MLP_GFN(nn.Module):
 		metric['LogR_qzxy']=LogR_qzxy.mean().item()
 		
 		metric['LogPB_qzxy']=LogPB_qzxy.mean().item()
+
+		metric['Log_pzx']=Log_pzx.mean().item()
 
 		metric['LogPF_BNN']=LogPF_BNN.mean().item()
 		
@@ -654,12 +763,12 @@ class MLPMaskGenerator(nn.Module):
 			activation=activation,
 		)
 
-	def _dist(self, x):
+	def _dist(self, x,T=1.0):
 
 		x = self.mlp(x)
 	
 		#x = torch.exp(x)/(1.0+torch.exp(x))
-		x=nn.Sigmoid()(x)
+		x=nn.Sigmoid()(x/T)
 	
 		dist=x
 		
@@ -667,10 +776,10 @@ class MLPMaskGenerator(nn.Module):
 
 		return dist
 
-	def forward(self, x):
+	def forward(self, x,T=1.0):
 
 		
-		probs=self._dist(x)
+		probs=self._dist(x,T)
 
 		return torch.bernoulli(probs), probs
 
@@ -679,6 +788,72 @@ class MLPMaskGenerator(nn.Module):
 		probs = dist * m + (1. - dist) * (1. - m)
 		return torch.log(probs).sum(1)
 
+
+
+class multiMLPMaskGenerator(nn.Module):
+	def __init__(self, in_dim_1,in_dim_2,in_dim_3,out_dim, hidden=[32], activation=nn.LeakyReLU):
+		super().__init__()
+	   
+		####use two separete MLP to ensure y is not ignored
+		self.mlp_1 = MLP(
+			in_dim=in_dim_1,
+			out_dim=10,
+			hidden=hidden,
+			activation=activation,
+		)
+
+
+
+		self.mlp_2 = MLP(
+		in_dim=in_dim_2,
+		out_dim=10,
+		hidden=hidden,
+		activation=activation,
+		)
+
+		self.mlp_3 = MLP(
+			in_dim=in_dim_3,
+			out_dim=10,
+			hidden=hidden,
+			activation=activation,
+		)
+
+		self.mlp_combine = MLP(
+		in_dim=30,
+		out_dim=out_dim,
+		hidden=hidden,
+		activation=activation,
+		)
+
+	def _dist(self, x1,x2,x3,T=1.0):
+
+		x1 = self.mlp_1(x1)
+		x2 = self.mlp_2(x2)
+		x3 = self.mlp_3(x3)
+
+
+		x=self.mlp_combine(torch.cat([x1,x2,x3],1))
+	
+		#x = torch.exp(x)/(1.0+torch.exp(x))
+		x=nn.Sigmoid()(x/T)
+	
+		dist=x
+		
+		#dist = dist.clamp(1e-3, 1.0-1e-3)
+
+		return dist
+
+	def forward(self, x1,x2,x3,T=1.0):
+
+		
+		probs=self._dist(x1,x2,x3,T)
+
+		return torch.bernoulli(probs), probs
+
+	def log_prob(self, x1,x2,x3, m):
+		dist = self._dist(x1,x2)
+		probs = dist * m + (1. - dist) * (1. - m)
+		return torch.log(probs).sum(1)
 
 
 def construct_unconditional_mask_generators(
@@ -716,6 +891,7 @@ def construct_unconditional_mask_generators(
 
 
 
+
 def construct_conditional_mask_generators(
 		layer_dims,
 		additional_input_dims,
@@ -740,6 +916,47 @@ def construct_conditional_mask_generators(
 		mask_generators.append(
 			MLPMaskGenerator(
 				in_dim=in_dim,
+				out_dim=out_dim,
+				hidden=hiddens,
+				activation=activation
+			)
+		)
+
+	return mask_generators
+
+
+def construct_multiinput_conditional_mask_generators(
+		layer_dims,
+		additional_input_dims,
+		hiddens=None,
+		activation=nn.LeakyReLU
+):
+	mask_generators = nn.ModuleList()
+	for layer_idx in range(len(layer_dims)):
+
+		if layer_idx==0:
+			in_dim1=layer_dims[layer_idx]
+			in_dim2=layer_dims[layer_idx]
+			in_dim3=additional_input_dims[layer_idx]
+			
+			out_dim=layer_dims[layer_idx]
+		
+		else:
+
+			in_dim2=layer_dims[layer_idx]
+			in_dim3=additional_input_dims[layer_idx]
+			
+			in_dim1=0
+
+			for j in range(layer_idx):
+				 in_dim1+=layer_dims[j]
+			
+
+			out_dim=layer_dims[layer_idx]
+
+		mask_generators.append(
+			multiMLPMaskGenerator(
+				in_dim_1=in_dim1,in_dim_2=in_dim2,in_dim_3=in_dim3,
 				out_dim=out_dim,
 				hidden=hiddens,
 				activation=activation

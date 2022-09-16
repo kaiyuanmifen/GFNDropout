@@ -27,8 +27,8 @@ def mnist(batch_size=100, pm=False):
 
 
     ##subset of training for speed when needed
-    #indices = list(range(len(train_dataset)))#[0::5]
-    #train_dataset = torch.utils.data.Subset(train_dataset, indices)
+    indices = list(range(len(train_dataset)))#[0::5]
+    train_dataset = torch.utils.data.Subset(train_dataset, indices)
 
     # s subset of trainingset is used as validation set for purposes such as early stopping
     train_dataset, validation_dataset = torch.utils.data.random_split(train_dataset, [int(0.7*len(train_dataset)), int(0.3*len(train_dataset))])
@@ -46,8 +46,8 @@ def mnist(batch_size=100, pm=False):
     #test set
     test_dataset = datasets.MNIST(dir+'/data', train=False, transform=transform_data) 
     
-    # indices = list(range(len(test_dataset)))#[0::50]
-    # test_dataset = torch.utils.data.Subset(test_dataset, indices)
+    indices = list(range(len(test_dataset)))#[0::50]
+    test_dataset = torch.utils.data.Subset(test_dataset, indices)
     
     if opt.labelnoise_val > 0.0:
         test_dataset.targets = flip_target(val_dataset.targets, opt.labelnoise_val, num_classes)

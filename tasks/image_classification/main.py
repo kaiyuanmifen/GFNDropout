@@ -91,6 +91,8 @@ def train(**kwargs):
     model = getattr(models, opt.model)(lambas=opt.lambas, num_classes=num_classes,
          weight_decay=opt.weight_decay,opt=opt).to(
         device)
+
+    model.train()
     pytorch_total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print('************total params size: ', pytorch_total_params)
     print(model)
@@ -178,7 +180,16 @@ def train(**kwargs):
         LogPF_BNN_meter=meter.AverageValueMeter()
 
         actual_dropout_rate_meter=meter.AverageValueMeter()
-            
+
+        COR_qz_meter=meter.AverageValueMeter()
+
+        COR_qzxy_meter=meter.AverageValueMeter()
+
+        Log_pz_meter=meter.AverageValueMeter()
+
+        Log_pzx_meter=meter.AverageValueMeter()
+
+
     else:
         accuracy_meter = meter.ClassErrorMeter(accuracy=True)
     
@@ -281,6 +292,12 @@ def train(**kwargs):
 
                 actual_dropout_rate_meter.add(metric['actual_dropout_rate'])
 
+                COR_qz_meter.add(metric['COR_qz'])
+                COR_qzxy_meter.add(metric['COR_qzxy'])
+
+                Log_pz_meter.add(metric['Log_pz'])
+                Log_pzx_meter.add(metric['Log_pzx'])
+
             if opt.GFN_dropout==False:
                 
                 e_fl, e_l0 = model.get_exp_flops_l0() if opt.gpus <= 1 else model.module.get_exp_flops_l0()
@@ -311,6 +328,16 @@ def train(**kwargs):
                     vis.plot('train/LogPF_BNN', LogPF_BNN_meter.value()[0])
 
                     vis.plot('train/actual_dropout_rate', actual_dropout_rate_meter.value()[0])
+
+
+                    vis.plot('train/COR_qz', COR_qz_meter.value()[0])
+
+                    vis.plot('train/COR_qzxy', COR_qzxy_meter.value()[0])
+
+
+                    vis.plot('train/Log_pz', Log_pz_meter.value()[0])
+
+                    vis.plot('train/Log_pzx', Log_pzx_meter.value()[0])
 
 
                 if opt.verbose:
@@ -366,9 +393,9 @@ def train(**kwargs):
         if opt.GFN_dropout==True:
             model.taskmodel_scheduler.step()
 
-            ####gradually improve beta (= decrease temperature)
-            #if epoch%50==0:
-                #model.beta=5*model.beta
+            ####gradually improve beta (= decrease temperature) to allow the GFN to find different modes
+            if epoch!=0 and epoch%30==0:
+                model.beta=min(3.16*model.beta,1.0) #1000^(1/6)~3.16, assumging there are 200 epochs
 
 
 

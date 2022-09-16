@@ -223,7 +223,7 @@ class ResNet_GFN(nn.Module):
 
                 LogPB_qz+=0 #uniform backward P
             else:
-                masks_qz[layer_idx].append(torch.ones(self.layer_dims[layer_idx]).to(device))
+                masks_qz[layer_idx].append(torch.ones(self.maskgenerator_input_shapes[layer_idx][0]).to(device))
                 
 
         '''
@@ -316,14 +316,17 @@ class ResNet_GFN(nn.Module):
                 m=m_qz_l*m_qzxy_l
 
             elif mask=="random":
-                m=self.rand_mask_generator(x).to(device)
+                m=self.rand_mask_generator(torch.zeros(out.shape[0],out.shape[1]).to(device)).to(device)
 
             elif mask=="none":
                 m=torch.ones(x.shape).to(device)
 
             m=m.detach().clone()#mask should not interfere backbone model(MLP or resnet etc) training
             ###apply the mask
+ 
+
             out=out.mul(m.unsqueeze(2).unsqueeze(3)) 
+
 
             actual_masks.append(m)
             out += identity
@@ -421,7 +424,7 @@ class ResNet_GFN(nn.Module):
                 m=m_qz_l*m_qzxy_l
 
             elif mask=="random":
-                m=self.rand_mask_generator(x).to(device)
+                m=self.rand_mask_generator(torch.zeros(x.shape[0],x.shape[1]).to(device)).to(device)
 
             elif mask=="none":
                 m=torch.ones(x.shape).to(device)

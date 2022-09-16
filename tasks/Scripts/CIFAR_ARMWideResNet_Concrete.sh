@@ -33,4 +33,6 @@ python ../image_classification/main.py train \
 										--fixdistrdp False \
 										--ctype "Bernoulli" \
 										--dropout_distribution 'bernoulli' \
-										--model_name "_CIFAR_ARMWideResNet_Concrete"
+										--model_name "_CIFAR_ARMWideResNet_Concrete" \
+										--max_epoch 200 \
+
