@@ -1,9 +1,8 @@
 #!/bin/bash
-#SBATCH --job-name=GFN
+#SBATCH --job-name=contextual
 #SBATCH --gres=gpu:1               # Number of GPUs (per node)
-#SBATCH --mem=65G               # memory (per node)
-#SBATCH --time=0-6:50            # time (DD-HH:MM)
-
+#SBATCH --mem=75G               # memory (per node)
+#SBATCH --time=0-7:50            # time (DD-HH:MM)
 
 ###########cluster information above this line
 
@@ -17,25 +16,23 @@ conda activate GFlownets
 
 
 
+###pretraining
+#python Pretrain_MNIST.py --name "MNIST_Suprise"
 
- CUDA_LAUNCH_BLOCKING=1 python ../image_classification/main.py train \
-										--model=ResNet_GFN \
-										--GFN_dropout True \
-										--dropout_rate 0.5 \
+python ../image_classification/main.py train \
+										--model=ResNet_Con \
+										--GFN_dropout False \
 										--dataset=cifar10 \
 										--lambas=.001 \
 										--optimizer=momentum \
 										--lr=0.1 \
 										--schedule_milestone="[60, 120]" \
 										--add_noisedata=False \
-										--concretedp False \
+										--concretedp True \
 										--dptype False \
 										--fixdistrdp False \
 										--ctype "Bernoulli" \
 										--dropout_distribution 'bernoulli' \
-										--model_name "_CIFAR_ResNet_GFN" \
-										--mask "none" \
-										--BNN False \
+										--model_name "_CIFAR_ARMWideResNet_Concrete" \
 										--max_epoch 200 \
-										#--start_model "../../checkpoints/ARMWideResNet_GFN_CIFAR_ARMWideResNet_GFN_both_NN_base" \
-										
+

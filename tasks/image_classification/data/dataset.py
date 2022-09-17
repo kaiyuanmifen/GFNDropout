@@ -46,7 +46,7 @@ def mnist(batch_size=100, pm=False):
     #test set
     test_dataset = datasets.MNIST(dir+'/data', train=False, transform=transform_data) 
     
-    indices = list(range(len(test_dataset)))#[0::50]
+    indices = list(range(len(test_dataset)))#[0::5]
     test_dataset = torch.utils.data.Subset(test_dataset, indices)
     
     if opt.labelnoise_val > 0.0:
@@ -101,9 +101,9 @@ def cifar10(augment=True, batch_size=128):
 
 
 
-    ##subset of training for speed when needed
-    #indices = list(range(len(trainset)))[0::50]
-    #trainset = torch.utils.data.Subset(trainset, indices)
+    #subset of training for speed when needed
+    indices = list(range(len(trainset)))#[0::50]
+    trainset = torch.utils.data.Subset(trainset, indices)
 
     testset=datasets.CIFAR10(dir+'/data', train=False, transform=transform_test)
     indices = list(range(len(testset)))#[0::10]

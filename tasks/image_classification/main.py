@@ -54,8 +54,8 @@ def image_augmentation(inputs):
         inputs=inputs.unsqueeze(0).repeat(3,1,1)
     else:
         bwimage=False
-    #grouped_z1_pil = transforms.RandomRotation(degrees=(0,360))(inputs)
-    grouped_z1_pil = transforms.GaussianBlur(kernel_size=(5, 9), sigma=(5.0))(inputs)
+    grouped_z1_pil = transforms.RandomRotation(degrees=(0,360))(inputs)
+    #grouped_z1_pil = transforms.GaussianBlur(kernel_size=(5, 9), sigma=(5.0))(inputs)
     
     #grouped_z1_pil = transforms.GaussianBlur(kernel_size=(5, 9), sigma=(0.1, 0.5))(im)
     #output_tensor = torchvision.transforms.ToTensor()(grouped_z1_pil)
@@ -94,12 +94,13 @@ def train(**kwargs):
 
     model.train()
     pytorch_total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    print('************total params size: ', pytorch_total_params)
     print(model)
+    print('************total params size: ', pytorch_total_params)
+    
     #resume the model
     if opt.start_model is not None:
         #model.load_state_dict(torch.load(os.path.join(opt.start_model, '100.model'))
-        model.load_state_dict(torch.load(os.path.join(opt.start_model, 'best.model')))
+        model.load_state_dict(torch.load(os.path.join(opt.start_model, 'best.model'), map_location=device))
         print("loading from existing model:",os.path.join(opt.start_model, 'best.model'))
     if opt.gpus > 1:
         model = nn.DataParallel(model)
@@ -162,7 +163,7 @@ def train(**kwargs):
     # resume the model
     if opt.start_optim is not None:
         #optimizer.load_state_dict(torch.load(os.path.join(opt.start_optim, '100.optim')))
-        optimizer.load_state_dict(torch.load(os.path.join(opt.start_optim, str(opt.start_epoch)+'.optim')))
+        optimizer.load_state_dict(torch.load(os.path.join(opt.start_optim, str(opt.start_epoch)+'.optim'), map_location=device))
 
 
     loss_meter = meter.AverageValueMeter()
@@ -650,7 +651,7 @@ def test(**kwargs):
         return total_loss
 
     if len(opt.load_file) > 0:
-        model.load_state_dict(torch.load(opt.load_file))
+        model.load_state_dict(torch.load(opt.load_file,map_location=device))
         val_accuracy, val_loss, label_dict, input__dict, logits_dict, logits_dict_greedy, base_aic, up, ucpred, ac_prob, iu_prob, elbo, ece = val(model, test_loader, criterion, num_classes, opt)
         
         if opt.GFN_dropout==False:
@@ -740,7 +741,7 @@ def test_rotate(**kwargs):
         return total_loss
 
     if len(opt.load_file) > 0:
-        model.load_state_dict(torch.load(opt.load_file))
+        model.load_state_dict(torch.load(opt.load_file,map_location=device))
         rotate_image, label_dict, logits_dict = val_rotate(model, test_loader, num_classes, opt)
         # print("loss:{loss:.2f},val_acc:{val_acc:.2f},prune_rate:{pr:.2f}"
         #       .format(loss=val_loss, val_acc=val_accuracy,

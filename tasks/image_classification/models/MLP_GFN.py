@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-#from models.layer import ARMDense_GFFN as ARMDense
+
 import torch.nn.functional as F
 from copy import deepcopy
 import numpy as np
@@ -13,7 +13,7 @@ import random
 epsilon = 1e-7
 device=torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 class MLP_GFN(nn.Module):
-	def __init__(self, input_dim=784, num_classes=10, N=60000, layer_dims=(1024,1024,1024),
+	def __init__(self, input_dim=784, num_classes=10, N=60000, layer_dims=(256,256,256),
 				weight_decay=5e-4, lambas=(.1, .1, .1),
 				 activation=nn.LeakyReLU,opt=None):
 		super(MLP_GFN, self).__init__()
@@ -220,12 +220,11 @@ class MLP_GFN(nn.Module):
 			temperature=self.temperature
 		else:
 			temperature=1.0
-
 		masks_qz=[[] for _ in range(len(self.fc))]
 		
 		for layer_idx in range(len(self.fc)):
 
-			if "topdown" in mask or "upNdown" in mask:
+			if ("topdown" in mask) or ("upNdown" in mask):
 				if layer_idx==0:
 					qz_mask_l,qz_p_l=self.q_z_mask_generators[layer_idx](torch.zeros(batch_size,input_dim).to(device),temperature)      
 					
@@ -341,7 +340,7 @@ class MLP_GFN(nn.Module):
 
 			EPSILON=random.uniform(0,1)
 
-			if mask=="random" or (EPSILON<self.random_chance and self.training):# during training ,of a centain chance a random policy will be used to explore the space
+			if mask=="random" or (EPSILON<self.random_chance  and self.training):# during training ,of a centain chance a random policy will be used to explore the space
 				
 				m=self.rand_mask_generator(x).to(device)
 
@@ -446,11 +445,11 @@ class MLP_GFN(nn.Module):
 		LogR_unconditional=self.beta*self.N*LL.detach().clone()+Log_pz.detach().clone()
 		GFN_loss_unconditional=(LogZ_unconditional+LogPF_qz-LogR_unconditional-LogPB_qz)**2#+kl_weight*kl#jointly train the last layer BNN and the mask generator
 		
-		LogR_conditional=LL.detach().clone()+Log_pzx.detach().clone()
+		LogR_conditional=self.beta*LL.detach().clone()+Log_pzx.detach().clone()
 		GFN_loss_conditional=(LogZ_conditional+LogPF_qzxy-LogR_conditional-LogPB_qzxy)**2#+kl_weight*kl#jointly train the last layer BNN and the mask generator
 		
 		#LogR_upNdown=self.beta*self.N*(LL.detach().clone()+Log_pzx.detach().clone())+Log_pz.detach().clone()
-		LogR_upNdown=self.beta*(LL.detach().clone()+Log_pzx.detach().clone()+Log_pz.detach().clone())
+		LogR_upNdown=self.beta*(LL.detach().clone())+Log_pzx.detach().clone()+Log_pz.detach().clone()
 		GFN_loss_upNdown=(LogZ_conditional+LogPF_qzxy-LogR_upNdown-LogPB_qzxy)**2#+kl_weight*kl#jointly train the last layer BNN and the mask generator
 		
 
@@ -562,7 +561,7 @@ class MLP_GFN(nn.Module):
 
 					self.taskmodel_optimizer.zero_grad()
 
-					taskmodel_loss=self.N*CEloss
+					taskmodel_loss=CEloss
 					taskmodel_loss.mean().backward(retain_graph=True)
 
 					#self.taskmodel_optimizer.step()
@@ -617,7 +616,7 @@ class MLP_GFN(nn.Module):
 
 					self.taskmodel_optimizer.zero_grad()
 
-					taskmodel_loss=self.N*CEloss
+					taskmodel_loss=CEloss
 					taskmodel_loss.mean().backward(retain_graph=True)
 
 					#self.taskmodel_optimizer.step()
@@ -627,7 +626,7 @@ class MLP_GFN(nn.Module):
 
 				self.p_zx_optimizer.zero_grad()
 
-				pzx_loss=-self.N*Log_pzx
+				pzx_loss=-Log_pzx
 				pzx_loss.mean().backward(retain_graph=True)
 
 

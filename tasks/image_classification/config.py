@@ -58,7 +58,7 @@ class DefaultConfig:
 
     GFN_dropout=False
     augment_test=False
-    mask="topdown"
+    mask="none"
     BNN=False
     beta=1.0
 

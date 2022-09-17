@@ -36,7 +36,7 @@ python -u ../image_classification/main.py test \
 										--dropout_distribution 'bernoulli' \
 										--augment_test=False \
 										--model_name "_MNIST_ARMMLP_Contextual" \
-										--load_file="../../checkpoints/ARMMLP_MNIST_ARMMLP_Contextual_20220915200034/best.model" \
+										--load_file="../../checkpoints/ARMMLP_MNIST_ARMMLP_Contextual_20220916142356/190.model" \
 										
 
 
@@ -55,7 +55,7 @@ python -u ../image_classification/main.py test \
 										--dropout_distribution 'bernoulli' \
 										--augment_test=True \
 										--model_name "_MNIST_ARMMLP_Contextual" \
-										--load_file="../../checkpoints/ARMMLP_MNIST_ARMMLP_Contextual_20220915200034/best.model" \
+										--load_file="../../checkpoints/ARMMLP_MNIST_ARMMLP_Contextual_20220916142356/190.model" \
 										
 
 
@@ -79,7 +79,7 @@ python ../image_classification/main.py test \
 										--dropout_distribution 'bernoulli' \
 										--augment_test=False \
 										--model_name "_CIFAR_ARMWideResNet_Concrete" \
-										--load_file="../../checkpoints/ARMMLP_MNIST_ARMMLP_Concrete_20220915200034/best.model" \
+										--load_file="../../checkpoints/ARMMLP_MNIST_ARMMLP_Concrete_20220916142248/190.model" \
 										
 
 
@@ -100,61 +100,65 @@ python ../image_classification/main.py test \
 										--dropout_distribution 'bernoulli' \
 										--augment_test=True \
 										--model_name "_CIFAR_ARMWideResNet_Concrete" \
-										--load_file="../../checkpoints/ARMMLP_MNIST_ARMMLP_Concrete_20220915200034/best.model" \
+										--load_file="../../checkpoints/ARMMLP_MNIST_ARMMLP_Concrete_20220916142248/190.model" \
 										
 
 
 
 
 
-#####naive baseline
 
 
 
-# python -u ../image_classification/main.py test \
-# 										--model=MLP_GFN \
-# 										--GFN_dropout True \
-# 										--dropout_rate 0.2 \
-# 										--dataset=mnist \
-# 										--lambas='[.0,.0,.0,.0]' \
-# 										--optimizer=adam \
-# 										--lr=0.001 \
-# 										--add_noisedata=False \
-# 										--dptype False \
-# 										--concretedp False \
-# 										--fixdistrdp False \
-# 										--ctype "Bernoulli" \
-# 										--dropout_distribution 'bernoulli' \
-# 										--mask_off "both" \
-# 										--lastlayer "NN" \
-# 										--model_name "_MNIST_MLP_GFN" \
-# 										--augment_test=False \
-# 										--load_file="../../checkpoints/MLP_GFN_MNIST_MLP_GFN_both_NN_20220905220420/best.model" \
+####no mask  + NN baseline
+
+
+
+python -u ../image_classification/main.py test \
+										--model=MLP_GFN \
+										--GFN_dropout True \
+										--dropout_rate 0.2 \
+										--dataset=mnist \
+										--lambas='[.0,.0,.0,.0]' \
+										--optimizer=adam \
+										--lr=0.001 \
+										--add_noisedata=False \
+										--dptype False \
+										--concretedp False \
+										--fixdistrdp False \
+										--ctype "Bernoulli" \
+										--dropout_distribution 'bernoulli' \
+										--mask "none" \
+										--BNN False \
+										--model_name "_MNIST_MLP_GFN" \
+										--augment_test=False \
+										--load_file="../../checkpoints/MLP_GFN_MNIST_MLP_GFN_none_False_20220916142854/190.model" \
 										
 
 
 
 
-# python -u ../image_classification/main.py test \
-# 										--model=MLP_GFN \
-# 										--GFN_dropout True \
-# 										--dropout_rate 0.2 \
-# 										--dataset=mnist \
-# 										--lambas='[.0,.0,.0,.0]' \
-# 										--optimizer=adam \
-# 										--lr=0.001 \
-# 										--add_noisedata=False \
-# 										--dptype False \
-# 										--concretedp False \
-# 										--fixdistrdp False \
-# 										--ctype "Bernoulli" \
-# 										--dropout_distribution 'bernoulli' \
-# 										--mask_off "both" \
-# 										--lastlayer "NN" \
-# 										--model_name "_MNIST_MLP_GFN" \
-# 										--augment_test=True \
-# 										--load_file="../../checkpoints/MLP_GFN_MNIST_MLP_GFN_both_NN_20220905220420/best.model" \
-							
+python -u ../image_classification/main.py test \
+										--model=MLP_GFN \
+										--GFN_dropout True \
+										--dropout_rate 0.2 \
+										--dataset=mnist \
+										--lambas='[.0,.0,.0,.0]' \
+										--optimizer=adam \
+										--lr=0.001 \
+										--add_noisedata=False \
+										--dptype False \
+										--concretedp False \
+										--fixdistrdp False \
+										--ctype "Bernoulli" \
+										--dropout_distribution 'bernoulli' \
+										--mask "none" \
+										--BNN False \
+										--model_name "_MNIST_MLP_GFN" \
+										--augment_test=True \
+										--load_file="../../checkpoints/MLP_GFN_MNIST_MLP_GFN_none_False_20220916142854/190.model" \
+										
+
 
 ####MC  + NN baseline
 
@@ -178,7 +182,7 @@ python -u ../image_classification/main.py test \
 										--BNN False \
 										--model_name "_MNIST_MLP_GFN" \
 										--augment_test=False \
-										--load_file="../../checkpoints/MLP_GFN_MNIST_MLP_GFN_random_False_20220915200340/best.model" \
+										--load_file="../../checkpoints/MLP_GFN_MNIST_MLP_GFN_random_False_20220916142541/190.model" \
 										
 
 
@@ -202,7 +206,7 @@ python -u ../image_classification/main.py test \
 										--BNN False \
 										--model_name "_MNIST_MLP_GFN" \
 										--augment_test=True \
-										--load_file="../../checkpoints/MLP_GFN_MNIST_MLP_GFN_random_False_20220915200340/best.model" \
+										--load_file="../../checkpoints/MLP_GFN_MNIST_MLP_GFN_random_False_20220916142541/190.model" \
 										
 
 
@@ -231,7 +235,7 @@ python -u ../image_classification/main.py test \
 										--BNN False \
 										--model_name "_MNIST_MLP_GFN" \
 										--augment_test=False \
-										--load_file="../../checkpoints/MLP_GFN_MNIST_MLP_GFN_topdown_False_20220915200340/best.model" \
+										--load_file="../../checkpoints/MLP_GFN_MNIST_MLP_GFN_topdown_False_20220916142541/190.model" \
 										
 
 
@@ -255,7 +259,7 @@ python -u ../image_classification/main.py test \
 										--BNN False \
 										--model_name "_MNIST_MLP_GFN" \
 										--augment_test=True \
-										--load_file="../../checkpoints/MLP_GFN_MNIST_MLP_GFN_topdown_False_20220915200340/best.model" \
+										--load_file="../../checkpoints/MLP_GFN_MNIST_MLP_GFN_topdown_False_20220916142541/190.model" \
 										
 
 
@@ -280,7 +284,7 @@ python -u ../image_classification/main.py test \
 										--BNN False \
 										--model_name "_MNIST_MLP_GFN" \
 										--augment_test=False \
-										--load_file="../../checkpoints/MLP_GFN_MNIST_MLP_GFN_bottomup_False_20220915200337/best.model" \
+										--load_file="../../checkpoints/MLP_GFN_MNIST_MLP_GFN_bottomup_False_20220916142250/190.model" \
 										
 
 
@@ -304,7 +308,7 @@ python -u ../image_classification/main.py test \
 										--BNN False \
 										--model_name "_MNIST_MLP_GFN" \
 										--augment_test=True \
-										--load_file="../../checkpoints/MLP_GFN_MNIST_MLP_GFN_bottomup_False_20220915200337/best.model" \
+										--load_file="../../checkpoints/MLP_GFN_MNIST_MLP_GFN_bottomup_False_20220916142250/190.model" \
 										
 
 
@@ -328,7 +332,7 @@ python -u ../image_classification/main.py test \
 										--BNN False \
 										--model_name "_MNIST_MLP_GFN" \
 										--augment_test=False \
-										--load_file="../../checkpoints/MLP_GFN_MNIST_MLP_GFN_upNdown_False_20220915200336/best.model" \
+										--load_file="../../checkpoints/MLP_GFN_MNIST_MLP_GFN_upNdown_False_20220916142350/190.model" \
 										
 
 
@@ -352,7 +356,7 @@ python -u ../image_classification/main.py test \
 										--BNN False \
 										--model_name "_MNIST_MLP_GFN" \
 										--augment_test=True \
-										--load_file="../../checkpoints/MLP_GFN_MNIST_MLP_GFN_upNdown_False_20220915200336/best.model" \
+										--load_file="../../checkpoints/MLP_GFN_MNIST_MLP_GFN_upNdown_False_20220916142350/190.model" \
 										
 
 
