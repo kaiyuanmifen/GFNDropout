@@ -10,7 +10,6 @@ python -u ../image_classification/main.py train \
 										--concretedp True \
 										--dptype False \
 										--fixdistrdp False \
-										--mask "none" \
 										--ctype "Bernoulli" \
 										--dropout_distribution 'bernoulli' \
 										--model_name "_IECU_MLP_Concrete" \
@@ -27,7 +26,6 @@ python -u ../image_classification/main.py train \
 										--schedule_milestone="[60, 120]" \
 										--add_noisedata=False \
 										--dptype True \
-										--mask "none" \
 										--fixdistrdp False \
 										--ctype "Bernoulli" \
 										--dropout_distribution 'bernoulli' \
