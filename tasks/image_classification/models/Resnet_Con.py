@@ -68,7 +68,7 @@ class ResNet_Con(nn.Module):
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.opt=opt
 
-        nChannels = [64, 128, 256, 512]
+        nChannels = [64,64,128, 256, 512]
         #assert ((depth - 4) % 6 == 0)
         #self.n = (depth - 4) // 6 # 4
         self.n = 2
@@ -95,9 +95,15 @@ class ResNet_Con(nn.Module):
         # 3rd block
         self.block3 = NetworkBlock(self.n, nChannels[2], nChannels[3], block, 2, droprate_init, self.weight_decay,
                                    self.lamba, local_rep=self.opt.local_rep,opt=self.opt)
+        
+        # 4th block
+        self.block4 = NetworkBlock(self.n, nChannels[3], nChannels[4], block, 2, droprate_init, self.weight_decay,
+                                   self.lamba, local_rep=self.opt.local_rep,opt=self.opt)
+        
+
         # bn, relu and classifier
-        self.bn = nn.BatchNorm2d(nChannels[3])
-        self.fcout = MAPDense(nChannels[3], num_classes, weight_decay=self.weight_decay)
+        self.bn = nn.BatchNorm2d(nChannels[4])
+        self.fcout = MAPDense(nChannels[4], num_classes, weight_decay=self.weight_decay)
 
         self.layers, self.bn_params, self.l0_layers = [], [], []
         for m in self.modules():
@@ -133,9 +139,11 @@ class ResNet_Con(nn.Module):
         out = self.block1(out)
         out = self.block2(out)
         out = self.block3(out)
+        out = self.block4(out)
+        
         out = F.relu(self.bn(out))
         #out = F.relu(out)
-        out = F.avg_pool2d(out, 8)
+        out = F.avg_pool2d(out, 4).unsqueeze(1).unsqueeze(2)
         out = out.view(out.size(0), -1)
         return self.fcout(out)
 
@@ -187,6 +195,25 @@ class ResNet_Con(nn.Module):
             self.eval() if self.opt.gpus <= 1 else self.module.eval()
             out = self.block3.layers[i].conv2(F.relu(out))
             out = torch.add(out, x if self.block3.layers[i].equalInOut else self.block3.layers[i].convShortcut(x))
+
+        # block4
+        for i in range(4):
+            x = out
+            if not self.block4.layers[i].equalInOut:
+                self.train() if self.opt.gpus <= 1 else self.module.train()
+                x = F.relu(self.block4.layers[i].bn1(x))
+            else:
+                out = F.relu(self.block4.layers[i].bn1(x))
+            self.eval() if self.opt.gpus <= 1 else self.module.eval()
+            out = self.block4.layers[i].conv1(out if self.block4.layers[i].equalInOut else x)
+            self.train() if self.opt.gpus <= 1 else self.module.train()
+            out = self.block4.layers[i].bn2(out)
+            self.eval() if self.opt.gpus <= 1 else self.module.eval()
+            out = self.block4.layers[i].conv2(F.relu(out))
+            out = torch.add(out, x if self.block4.layers[i].equalInOut else self.block4.layers[i].convShortcut(x))
+
+
+
         self.train() if self.opt.gpus <= 1 else self.module.train()
         out = F.relu(self.bn(out))
         self.eval() if self.opt.gpus <= 1 else self.module.eval()
@@ -224,7 +251,7 @@ class ResNet_Con(nn.Module):
     def forward(self, x, y=None):
         #flag:
         x=x.to(self.device)
-        self.block_list = self.block1.layers + self.block2.layers + self.block3.layers
+        self.block_list = self.block1.layers + self.block2.layers + self.block3.layers+ self.block4.layers
         if self.opt.var_dropout:
             if self.training:
                 score = self.score(x)
@@ -315,7 +342,7 @@ class ResNet_Con(nn.Module):
                                         pseudo_traj = self.block_list[k](pseudo_traj)
                                         f1_kl = f1_kl + self.block_list[k].conv1.post_nll_true - self.block_list[k].conv1.prior_nll_true
                                     pseudo_traj = F.relu(self.bn(pseudo_traj))
-                                    pseudo_traj = F.avg_pool2d(pseudo_traj, 8)
+                                    pseudo_traj = F.avg_pool2d(pseudo_traj, 4).unsqueeze(1).unsqueeze(2)
                                     pseudo_traj = pseudo_traj.view(pseudo_traj.size(0), -1)
                                     pseudo_score = self.fcout(pseudo_traj).data
                                     f1 = nn.CrossEntropyLoss(reduce=False)(pseudo_score, y).data - self.opt.lambda_kl * f1_kl.data
@@ -328,7 +355,7 @@ class ResNet_Con(nn.Module):
                                     # TODO: change update phi.
                                 out = main_traj
                             out = F.relu(self.bn(out))
-                            out = F.avg_pool2d(out, 8)
+                            out = F.avg_pool2d(out, 4).unsqueeze(1).unsqueeze(2)
                             out = out.view(out.size(0), -1)
                             score = self.fcout(out)
                             f2 = nn.CrossEntropyLoss(reduce=False)(score.data, y).data - self.opt.lambda_kl * f2_kl.data
@@ -352,7 +379,7 @@ class ResNet_Con(nn.Module):
                 if self.opt.gumbelconcrete:
                     if self.training:
                         if self.opt.lambda_kl != 0.0:
-                            self.block_list = self.block1.layers + self.block2.layers + self.block3.layers
+                            self.block_list = self.block1.layers + self.block2.layers + self.block3.layers+ self.block4.layers
                             f_kl = 0
                             f_prior = 0
                             self.forward_mode(True)
@@ -373,7 +400,7 @@ class ResNet_Con(nn.Module):
                     if self.training:
                         self.forward_mode(True)
                         score = self.score(x)
-                        self.block_list = self.block1.layers + self.block2.layers + self.block3.layers
+                        self.block_list = self.block1.layers + self.block2.layers + self.block3.layers+ self.block4.layers
                         f1_kl = 0
                         f2_kl = 0
                         f1_prior = 0
@@ -492,21 +519,21 @@ class ResNet_Con(nn.Module):
         return [layer.expected_activated_neurons() for layer in self.l0_layers]
 
     def prune_rate(self):
-        if self.opt.var_dropout:
-            return 0
-        l = [layer.activated_neurons().cpu().numpy() for layer in self.l0_layers]
-        if self.opt.dptype:
-            pruning_rate = 100 - 100. * ((160**2 *4 + 320**2*4+640**2*4)/self.opt.cha_factor + 160 * 16 + (l[1] + l[2] + l[3] + l[0]) * 160 + (l[5] + l[6] + l[7] + l[4]) * 320 + (
-                    l[9] + l[10] + l[8]) * 640) \
-               / (16 * 160 + 160 * 160 * 3 + 160 * 320 + 320 * 320 * 3 + 320 * 640 + 640 * 640 * 3)
-            pruning_rate_2 = 100 - 100. * (160 * 16 + (l[1] + l[2] + l[3] + l[0]) * 160 + (l[5] + l[6] + l[7] + l[4]) * 320 + (
-                    l[9] + l[10] + l[8]) * 640) \
-               / (16 * 160 + 160 * 160 * 3 + 160 * 320 + 320 * 320 * 3 + 320 * 640 + 640 * 640 * 3)
-            print('decoder pruning rate', pruning_rate_2)
-        else:
-            pruning_rate = 100 - 100. * (l[0] * 16 + (l[1] + l[2] + l[3] + l[4]) * 160 + (l[5] + l[6] + l[7] + l[8]) * 320 + (
-                    l[9] + l[10] + l[11]) * 640) \
-               / (16 * 160 + 160 * 160 * 3 + 160 * 320 + 320 * 320 * 3 + 320 * 640 + 640 * 640 * 3)
+        #if self.opt.var_dropout:
+        return 0
+        # l = [layer.activated_neurons().cpu().numpy() for layer in self.l0_layers]
+        # if self.opt.dptype:
+        #     pruning_rate = 100 - 100. * ((160**2 *4 + 320**2*4+640**2*4)/self.opt.cha_factor + 160 * 16 + (l[1] + l[2] + l[3] + l[0]) * 160 + (l[5] + l[6] + l[7] + l[4]) * 320 + (
+        #             l[9] + l[10] + l[8]) * 640) \
+        #        / (16 * 160 + 160 * 160 * 3 + 160 * 320 + 320 * 320 * 3 + 320 * 640 + 640 * 640 * 3)
+        #     pruning_rate_2 = 100 - 100. * (160 * 16 + (l[1] + l[2] + l[3] + l[0]) * 160 + (l[5] + l[6] + l[7] + l[4]) * 320 + (
+        #             l[9] + l[10] + l[8]) * 640) \
+        #        / (16 * 160 + 160 * 160 * 3 + 160 * 320 + 320 * 320 * 3 + 320 * 640 + 640 * 640 * 3)
+        #     print('decoder pruning rate', pruning_rate_2)
+        # else:
+        #     pruning_rate = 100 - 100. * (l[0] * 16 + (l[1] + l[2] + l[3] + l[4]) * 160 + (l[5] + l[6] + l[7] + l[8]) * 320 + (
+        #             l[9] + l[10] + l[11]) * 640) \
+        #        / (16 * 160 + 160 * 160 * 3 + 160 * 320 + 320 * 320 * 3 + 320 * 640 + 640 * 640 * 3)
         return pruning_rate
 
     def z_phis(self):

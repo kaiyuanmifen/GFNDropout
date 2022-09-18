@@ -106,7 +106,7 @@ def cifar10(augment=True, batch_size=128):
     trainset = torch.utils.data.Subset(trainset, indices)
 
     testset=datasets.CIFAR10(dir+'/data', train=False, transform=transform_test)
-    indices = list(range(len(testset)))#[0::10]
+    indices = list(range(len(testset)))#[0::100]
     testset = torch.utils.data.Subset(testset, indices)
 
 

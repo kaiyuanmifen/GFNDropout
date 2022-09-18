@@ -615,8 +615,8 @@ def val(model, dataloader, criterion, num_classes, opt):
     #        vis.hist("hard_sigmoid(phi)/{}".format(i), F.hardtanh(opt.k * z_phi / 7. + .5, 0, 1).cpu().detach().numpy())
     #    else:
     #        vis.hist("sigmoid(phi)/{}".format(i), torch.sigmoid(opt.k * z_phi).cpu().detach().numpy())
-    if opt.GFN_dropout==False:
-        vis.plot("prune_rate", model.prune_rate() if opt.gpus <= 1 else model.module.prune_rate())
+    #if opt.GFN_dropout==False:
+     #   vis.plot("prune_rate", model.prune_rate() if opt.gpus <= 1 else model.module.prune_rate())
     #return accuracy_meter.value()[0], loss_meter.value()[0], label_dict, logits_dict
     return accuracy_meter_greedy.value()[0], loss_meter_greedy.value()[0], label_dict, input__dict, logits_dict, logits_dict_greedy, base_aic, up, ucpred, ac_prob, iu_prob, np.mean(elbo_list)*100, ece
     #accuracy_meter.value()[0], loss_meter.value()[0]
