@@ -7,6 +7,7 @@ python -u ../image_classification/main.py train \
 										--lr=0.1 \
 										--schedule_milestone="[60, 120]" \
 										--add_noisedata=False \
+										--mask "none" \
 										--concretedp True \
 										--dptype False \
 										--fixdistrdp False \
@@ -26,6 +27,7 @@ python -u ../image_classification/main.py train \
 										--schedule_milestone="[60, 120]" \
 										--add_noisedata=False \
 										--dptype True \
+										--mask "none" \
 										--fixdistrdp False \
 										--ctype "Bernoulli" \
 										--dropout_distribution 'bernoulli' \
