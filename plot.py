@@ -14,16 +14,16 @@ import numpy as np
 # Make loss df
 # Plot time series with sns
 
-FOLDER = "Results_Final_18_600_2"
+FOLDER = "Results_Final_18_600_2_CIFAR_Final"
 IMAGE_FOLDER = f"image_{FOLDER}"
 os.makedirs(IMAGE_FOLDER,exist_ok=True)
 
 files = [f.name for f in os.scandir(FOLDER)]
 files = [f for f in files if f.endswith('.csv')] # Get only CSV files
 
-for image_type in ['CIFAR10','MNIST','SVHN']:
-    for N_units in [1024]:
-        for p in [0.5]:
+for image_type in ['CIFAR10']:
+    for N_units in [256]:
+        for p in [0.2]:
             for beta in [1.0]:
                 for OODReward in [2]:
                     for data_ratio in [1.0]:
@@ -53,6 +53,8 @@ for image_type in ['CIFAR10','MNIST','SVHN']:
                                     loss_dfs.append(losses_df)
                                     acc_dfs.append(acc_df) 
                                 except Exception as e:
+                                    print(e)
+                                    import pdb;pdb.set_trace()
                                     continue    
 
                             all_loss_df = pd.concat(loss_dfs,ignore_index=True)
