@@ -18,8 +18,16 @@ class MLP_GFN(nn.Module):
 				 activation=nn.LeakyReLU,opt=None):
 		super(MLP_GFN, self).__init__()
 
+		self.opt = opt
+		self.iecu = self.opt.is_iecu
+
+		if self.iecu:
+			# layer_dims=(1402, 1402, 1402)
+			input_dim = 1369
+			num_classes = 2
+			N = 128
+
 		self.device=torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-		self.opt=opt
 		self.layer_dims = layer_dims
 		self.input_dim = input_dim
 		self.N = N #will be used to multply the likihood term in the loss function in some methods
@@ -68,18 +76,22 @@ class MLP_GFN(nn.Module):
 
 		self.p_zx_mask_generators=construct_conditional_mask_generators(layer_dims=layer_dims,
 														additional_input_dims=[0 for j in layer_dims],
-														hiddens=[32,32]).to(device)#p(z|x)
-
+														hiddens=[32,32], opt=self.opt).to(device)#p(z|x)
+		# if self.iecu:
+		# 	self.q_zxy_mask_generators=construct_multiinput_conditional_mask_generators(layer_dims=layer_dims,
+		# 												additional_input_dims=[0 for j in layer_dims],
+		# 												hiddens=[32,32], opt=self.opt).to(device)#q(z|x,y) 
+		# else:
 		self.q_zxy_mask_generators=construct_multiinput_conditional_mask_generators(layer_dims=layer_dims,
-														additional_input_dims=[num_classes for j in layer_dims],
-														hiddens=[32,32]).to(device)#q(z|x,y) 
+															additional_input_dims=[num_classes for j in layer_dims],
+															hiddens=[32,32], opt=self.opt).to(device)#q(z|x,y) 
 
 	
 		self.p_z_mask_generators=construct_unconditional_mask_generators(layer_dims=layer_dims,
-														hiddens=[32,32]).to(device)#p(z) use small capacity to regularize q_z
+														hiddens=[32,32], opt=self.opt).to(device)#p(z) use small capacity to regularize q_z
 
 		self.q_z_mask_generators=construct_unconditional_mask_generators(layer_dims=layer_dims,
-														hiddens=[32,32]).to(device)#q(z)
+														hiddens=[32,32], opt=self.opt).to(device)#q(z)
 
 
 
@@ -89,10 +101,12 @@ class MLP_GFN(nn.Module):
 		
 
 		###partition functions
+		# if self.iecu:
+		# 	self.LogZ_total_flowestimator = MLP(in_dim=input_dim,out_dim=1,hidden=[16],
+		# 									activation=mg_activation, opt=self.opt).to(device)#paritization function when the GFN condition on both x and y			
+		# else:
 		self.LogZ_total_flowestimator = MLP(in_dim=input_dim+num_classes,out_dim=1,hidden=[16],
-									activation=mg_activation).to(device)#paritization function when the GFN condition on both x and y 
-
-
+												activation=mg_activation, opt=self.opt).to(device)#paritization function when the GFN condition on both x and y
 		self.LogZ_unconditional=nn.Parameter(torch.tensor(0.0))#paritization function when the GFN does not condition on any input 
 
 
@@ -145,14 +159,19 @@ class MLP_GFN(nn.Module):
 
 
 	def score(self, x):
-		return self.output(x.view(-1, self.input_dim))
+		# if self.iecu == False:
+		# 	return self.output(x.view(-1, self.input_dim))
+		# else:
+		return self.output(x)
+
+		# return self.output(x.view(-1, self.input_dim))
 
 	def forward(self, x, y,mask):
-
-
 		#using GFlownet
+		# if self.iecu == False:
+		x = x.view(-1, self.input_dim)
 
-		x=x.view(-1, self.input_dim)
+		# x=x.view(-1, self.input_dim)
 		
 		if self.training:
 			logits,actual_masks,masks_qz,masks_conditional,LogZ_unconditional,LogPF_qz,LogR_qz,LogPB_qz,LogPF_BNN,LogZ_conditional,LogPF_qzxy,LogR_qzxy,LogPB_qzxy,Log_pzx,Log_pz =self.GFN_forward(x,y,mask)
@@ -186,7 +205,7 @@ class MLP_GFN(nn.Module):
 	#####GFN related functions
 	def GFN_forward(self, x,y,mask="none"):
 		###during inference y are not used 
-
+		# print('X shape: {}'.format(x.size()))
 		x=x.reshape(x.shape[0],-1)
 		y=torch.nn.functional.one_hot(y, self.num_classes)#convert to one hot vector
 		batch_size,input_dim=x.shape[0],x.shape[1]
@@ -721,14 +740,19 @@ class RandomMaskGenerator(nn.Module):
 
 
 class MLP(nn.Module):
-	def __init__(self, in_dim=784, out_dim=10, hidden=None, activation=nn.LeakyReLU):
+	def __init__(self, in_dim=784, out_dim=10, hidden=None, activation=nn.LeakyReLU, opt=None):
 		super().__init__()
+
+		self.opt = opt
+		self.iecu = self.opt.is_iecu
+
 		if hidden is None:
 			hidden = [32, 32]
 		h_old = in_dim
+		
 		self.fc = nn.ModuleList()
-  
 		self.LN = nn.ModuleList()
+
 		for h in hidden:
 			self.fc.append(nn.Linear(h_old, h))
 			self.LN.append(torch.nn.LayerNorm(h))
@@ -741,7 +765,6 @@ class MLP(nn.Module):
 		self.activation = activation
 
 	def forward(self, x):
-
 		for layer,ln in zip(self.fc,self.LN):
 			x = self.activation()(layer(x))
 			x=ln(x)
@@ -751,7 +774,7 @@ class MLP(nn.Module):
 
 
 class MLPMaskGenerator(nn.Module):
-	def __init__(self, in_dim,out_dim, hidden=[32], activation=nn.LeakyReLU):
+	def __init__(self, in_dim,out_dim, hidden=[32], activation=nn.LeakyReLU, opt=None):
 		super().__init__()
 	   
 
@@ -760,26 +783,19 @@ class MLPMaskGenerator(nn.Module):
 			out_dim=out_dim,
 			hidden=hidden,
 			activation=activation,
+			opt=opt
 		)
 
 	def _dist(self, x,T=1.0):
-
 		x = self.mlp(x)
-	
 		#x = torch.exp(x)/(1.0+torch.exp(x))
 		x=nn.Sigmoid()(x/T)
-	
 		dist=x
-		
 		#dist = dist.clamp(1e-3, 1.0-1e-3)
-
 		return dist
 
 	def forward(self, x,T=1.0):
-
-		
 		probs=self._dist(x,T)
-
 		return torch.bernoulli(probs), probs
 
 	def log_prob(self, x, m):
@@ -790,7 +806,7 @@ class MLPMaskGenerator(nn.Module):
 
 
 class multiMLPMaskGenerator(nn.Module):
-	def __init__(self, in_dim_1,in_dim_2,in_dim_3,out_dim, hidden=[32], activation=nn.LeakyReLU):
+	def __init__(self, in_dim_1,in_dim_2,in_dim_3,out_dim, hidden=[32], activation=nn.LeakyReLU, opt=None):
 		super().__init__()
 	   
 		####use two separete MLP to ensure y is not ignored
@@ -799,6 +815,7 @@ class multiMLPMaskGenerator(nn.Module):
 			out_dim=10,
 			hidden=hidden,
 			activation=activation,
+			opt=opt
 		)
 
 
@@ -808,6 +825,7 @@ class multiMLPMaskGenerator(nn.Module):
 		out_dim=10,
 		hidden=hidden,
 		activation=activation,
+		opt=opt
 		)
 
 		self.mlp_3 = MLP(
@@ -815,6 +833,7 @@ class multiMLPMaskGenerator(nn.Module):
 			out_dim=10,
 			hidden=hidden,
 			activation=activation,
+			opt=opt
 		)
 
 		self.mlp_combine = MLP(
@@ -822,6 +841,7 @@ class multiMLPMaskGenerator(nn.Module):
 		out_dim=out_dim,
 		hidden=hidden,
 		activation=activation,
+		opt=opt
 		)
 
 	def _dist(self, x1,x2,x3,T=1.0):
@@ -858,21 +878,24 @@ class multiMLPMaskGenerator(nn.Module):
 def construct_unconditional_mask_generators(
 		layer_dims,
 		hiddens=None,
-		activation=nn.LeakyReLU
+		activation=nn.LeakyReLU,
+		opt=None
 ):
 	mask_generators = nn.ModuleList()
 
 	for layer_idx in range(len(layer_dims)):
 
 		if layer_idx==0:
-			in_dim=784
+			if opt.is_iecu:
+				in_dim=1369
+			else:
+				in_dim = 784
 			out_dim=layer_dims[layer_idx]
 		
 		else:
 			in_dim=0
 			for j in range(layer_idx):
 				 in_dim+=layer_dims[j]
-
 			out_dim=layer_dims[layer_idx]
 
 		
@@ -881,7 +904,8 @@ def construct_unconditional_mask_generators(
 				in_dim=in_dim,
 				out_dim=out_dim,
 				hidden=hiddens,
-				activation=activation
+				activation=activation,
+				opt=opt
 			)
 		)
 
@@ -895,21 +919,20 @@ def construct_conditional_mask_generators(
 		layer_dims,
 		additional_input_dims,
 		hiddens=None,
-		activation=nn.LeakyReLU
+		activation=nn.LeakyReLU,
+		opt=None,
 ):
 	mask_generators = nn.ModuleList()
 	for layer_idx in range(len(layer_dims)):
 
 		if layer_idx==0:
 			in_dim=layer_dims[layer_idx]+additional_input_dims[layer_idx]
-			out_dim=layer_dims[layer_idx]
-		
+			out_dim=layer_dims[layer_idx]		
 		else:
 			in_dim=additional_input_dims[layer_idx]
 			for j in range(layer_idx):
 				 in_dim+=layer_dims[j]
 			in_dim+=layer_dims[layer_idx]
-
 			out_dim=layer_dims[layer_idx]
 
 		mask_generators.append(
@@ -917,7 +940,8 @@ def construct_conditional_mask_generators(
 				in_dim=in_dim,
 				out_dim=out_dim,
 				hidden=hiddens,
-				activation=activation
+				activation=activation,
+				opt=opt
 			)
 		)
 
@@ -928,7 +952,8 @@ def construct_multiinput_conditional_mask_generators(
 		layer_dims,
 		additional_input_dims,
 		hiddens=None,
-		activation=nn.LeakyReLU
+		activation=nn.LeakyReLU,
+		opt=None
 ):
 	mask_generators = nn.ModuleList()
 	for layer_idx in range(len(layer_dims)):
@@ -949,8 +974,6 @@ def construct_multiinput_conditional_mask_generators(
 
 			for j in range(layer_idx):
 				 in_dim1+=layer_dims[j]
-			
-
 			out_dim=layer_dims[layer_idx]
 
 		mask_generators.append(
@@ -958,9 +981,9 @@ def construct_multiinput_conditional_mask_generators(
 				in_dim_1=in_dim1,in_dim_2=in_dim2,in_dim_3=in_dim3,
 				out_dim=out_dim,
 				hidden=hiddens,
-				activation=activation
+				activation=activation,
+				opt=opt
 			)
 		)
 
 	return mask_generators
-

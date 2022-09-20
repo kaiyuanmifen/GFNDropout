@@ -1,39 +1,36 @@
 python -u ../image_classification/main.py train \
-										--model=MLP_GFN \
-										--GFN_dropout False \
+										--model=ARMMLP \
+										--GFFN_dropout False \
 										--dataset=iecu \
-										--lambas=.001 \
-										--optimizer=momentum \
-										--lr=0.1 \
-										--schedule_milestone="[60, 120]" \
+										--lambas='[.0,.0,.0,.0]' \
+										--optimizer=adam \
+										--lr=0.001 \
 										--add_noisedata=False \
-										--mask "none" \
-										--concretedp True \
 										--dptype False \
+										--is_iecu True \
+										--concretedp True \
 										--fixdistrdp False \
 										--ctype "Bernoulli" \
 										--dropout_distribution 'bernoulli' \
-										--model_name "_IECU_MLP_Concrete" \
+										--model_name "_IECU_ARMMLP_Concrete" \
 										--max_epoch 100 \
 
 
 python -u ../image_classification/main.py train \
-										--model=MLP_GFN \
-										--GFN_dropout False \
+										--model=ARMMLP \
+										--GFFN_dropout False \
 										--dataset=iecu \
-										--lambas=.001 \
-										--optimizer=momentum \
-										--lr=0.1 \
-										--schedule_milestone="[60, 120]" \
+										--lambas='[.0,.0,.0,.0]' \
+										--optimizer=adam \
+										--lr=0.001 \
 										--add_noisedata=False \
 										--dptype True \
-										--mask "none" \
+										--concretedp False \
 										--fixdistrdp False \
 										--ctype "Bernoulli" \
 										--dropout_distribution 'bernoulli' \
-										--model_name "_IECU_MLP_Contextual" \
+										--model_name "_IECU_ARMMLP_Contextual" \
 										--max_epoch 100 \
-
 
 python -u ../image_classification/main.py train \
 										--model=MLP_GFN \
@@ -44,13 +41,14 @@ python -u ../image_classification/main.py train \
 										--lr=0.001 \
 										--add_noisedata=False \
 										--dptype False \
+										--is_iecu True \
 										--concretedp False \
 										--fixdistrdp False \
 										--ctype "Bernoulli" \
 										--dropout_distribution 'bernoulli' \
 										--mask "random" \
 										--BNN False \
-										--model_name "_IECU_MLP_GFN_Random" \
+										--model_name "_IECU_MLP_GFN" \
 										--beta 0.001 \
 										--max_epoch 100 \
 										
@@ -62,6 +60,7 @@ python -u ../image_classification/main.py train \
 										--lambas='[.0,.0,.0,.0]' \
 										--optimizer=adam \
 										--lr=0.001 \
+										--is_iecu True \
 										--add_noisedata=False \
 										--dptype False \
 										--concretedp False \
@@ -70,7 +69,7 @@ python -u ../image_classification/main.py train \
 										--dropout_distribution 'bernoulli' \
 										--mask "none" \
 										--BNN False \
-										--model_name "_IECU_MLP_GFN_None" \
+										--model_name "_IECU_MLP_GFN" \
 										--beta 0.001 \
 										--max_epoch 100 \
 
@@ -85,13 +84,14 @@ python -u ../image_classification/main.py train \
 										--lr=0.001 \
 										--add_noisedata=False \
 										--dptype False \
+										--is_iecu True \
 										--concretedp False \
 										--fixdistrdp False \
 										--ctype "Bernoulli" \
 										--dropout_distribution 'bernoulli' \
 										--mask "topdown" \
 										--BNN False \
-										--model_name "_IECU_MLP_GFN_TopDown" \
+										--model_name "_IECU_MLP_GFN" \
 										--beta 0.001 \
 										--max_epoch 100 \
 
@@ -108,10 +108,11 @@ python -u ../image_classification/main.py train \
 										--concretedp False \
 										--fixdistrdp False \
 										--ctype "Bernoulli" \
+										--is_iecu True \
 										--dropout_distribution 'bernoulli' \
 										--mask "bottomup" \
 										--BNN False \
-										--model_name "_IECU_MLP_GFN_BottomUp" \
+										--model_name "_IECU_MLP_GFN" \
 										--beta 0.001 \
 										--max_epoch 100 \
 
@@ -122,6 +123,7 @@ python -u ../image_classification/main.py train \
 										--lambas='[.0,.0,.0,.0]' \
 										--optimizer=adam \
 										--lr=0.001 \
+										--is_iecu True \
 										--add_noisedata=False \
 										--dptype False \
 										--concretedp False \
@@ -130,6 +132,6 @@ python -u ../image_classification/main.py train \
 										--dropout_distribution 'bernoulli' \
 										--mask "upNdown" \
 										--BNN False \
-										--model_name "_IECU_MLP_GFN_UpDown" \
+										--model_name "_IECU_MLP_GFN" \
 										--beta 0.001 \
 										--max_epoch 100 \

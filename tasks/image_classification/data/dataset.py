@@ -6,7 +6,7 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 
 # dir = '/work/06008/xf993/maverick2/contextual_dropout'
-dir = '../../../../'
+dir = '../'
 
 
 def flip_target(targets, flip_prob, num_classes):
@@ -37,7 +37,12 @@ def iecu(augment=False, batch_size=128):
     iecu_dataset = pd.read_csv(path, delimiter=",")
     targets = iecu_dataset["Death"].values
     iecu_dataset.drop(columns=['Death'], inplace=True)
-    features = iecu_dataset.values
+    
+    if opt.model == "MLP_GFN":
+        features = iecu_dataset.values[:, :1369]
+        features = features.reshape(-1, 37, 37)
+    else:
+        features = iecu_dataset.values
 
     train_data, eval_test_data, train_labels, eval_test_labels = train_test_split(features, targets, test_size=0.3,
                                                                                   random_state=1234)  # 70:30
@@ -53,6 +58,8 @@ def iecu(augment=False, batch_size=128):
     test_loader = torch.utils.data.DataLoader(iecu_test_dataset, batch_size=batch_size, shuffle=False)
 
     num_classes = 2
+
+    # print(torch.tensor(train_data).float().size())
     return train_loader, validation_loader, test_loader, num_classes
 
 
