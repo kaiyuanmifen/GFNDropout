@@ -1,3 +1,18 @@
+#!/bin/bash
+#SBATCH --job-name=IECU_MLP
+#SBATCH --gres=gpu:48gb:2
+#SBATCH --cpus-per-gpu=8
+#SBATCH --mem=65G
+#SBATCH --time=168:00:00         
+#SBATCH --partition=long
+#SBATCH --error=/home/mila/b/bonaventure.dossou/GFNDropout/slurmerror.txt
+#SBATCH --output=/home/mila/b/bonaventure.dossou/GFNDropout/slurmoutput.txt
+
+###########cluster information above this line
+cd ../../../
+module load python/3.6 cuda/10.1/cudnn/7.6 && source env/bin/activate
+cd GFNDropout/tasks/Scripts/
+
 python -u ../image_classification/main.py train \
 										--model=ARMMLP \
 										--GFFN_dropout False \
