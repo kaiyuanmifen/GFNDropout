@@ -62,7 +62,7 @@ class MCDropout(BaseModel):
         var = var ** 2
         return var
 
-    def get_prediction_with_uncertainty(self, x):
+    def get_prediction_with_uncertainty(self, x, **kwargs):
         out = super().get_prediction_with_uncertainty(x)
         if out is None:
             self.eval()

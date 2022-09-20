@@ -1,4 +1,5 @@
 import torch
+from uncertaintylearning.models.GFNDropout import GFNDropout
 from uncertaintylearning.utils import create_network, create_optimizer
 import numpy as np
 
@@ -6,6 +7,8 @@ from test_functions import functions, bounds as boundsx
 from smo import optimize
 from uncertaintylearning.models.mcdropout import MCDropout
 import pickle
+
+from uncertaintylearning.models.GFNDropout import MLP_GFN
 
 from argparse import ArgumentParser
 import os
@@ -16,7 +19,7 @@ parser.add_argument("--n-steps", type=int, default=50, help='number of optimizat
 parser.add_argument("--n-init", type=int, default=6, help='number of initial datapoints')
 parser.add_argument("--function", default='multi_optima', help='one of the keys of SMO.test_functions.functions')
 parser.add_argument("--noise", type=float, default=0, help='additive aleatoric noise')
-parser.add_argument("--method", default='deup', help='one of deup, gp, mcdropout, ensemble')
+parser.add_argument("--method", default='deup', help='one of deup, gp, mcdropout, ensemble, gfnmcdropout')
 parser.add_argument("--save_base_path", default='.', help='path to save results')
 
 args = parser.parse_args()
@@ -63,6 +66,14 @@ for seed in range(n_seeds):
         optimizer = create_optimizer(network, 1e-3)
         mcdropout_model = MCDropout(X_init, Y_init, network, optimizer, batch_size=64)
         outs = optimize(f, bounds, X_init, Y_init, model_type="mcdropout", networks=network, optimizers=optimizer,
+                        features=features,
+                        epochs=200, plot_stuff=False, domain=X, domain_image=Y, n_steps=n_steps)
+    
+    elif args.method == 'gfnmcdropout':
+        network = MLP_GFN(dim, 1, layer_dims=(128, 128, 128))
+        optimizer = None  # @Dianbo, how do you define `opt` in MLP_GFN ??
+        gfnmcdropout_model = GFNDropout(X_init, Y_init, network, optimizer, batch_size=16)
+        outs = optimize(f, bounds, X_init, Y_init, model_type="gfnmcdropout", networks=network, optimizers=optimizer,
                         features=features,
                         epochs=200, plot_stuff=False, domain=X, domain_image=Y, n_steps=n_steps)
 

@@ -35,8 +35,8 @@ class BaseModel(Model):
             preds = self.get_prediction_with_uncertainty(x.view(x.size(0) * x.size(1), x.size(2)), **kwargs)
             return preds[0].view(x.size(0), x.size(1), 1), preds[1].view(x.size(0), x.size(1), 1)
 
-    def posterior(self, x, **kwargs):
-        mvn = self.forward(x, **kwargs)
+    def posterior(self, X, **kwargs):
+        mvn = self.forward(X, **kwargs)
         return GPyTorchPosterior(mvn)
 
     def forward(self, x, **kwargs):

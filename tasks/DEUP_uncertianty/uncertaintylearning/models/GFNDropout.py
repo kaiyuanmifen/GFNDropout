@@ -515,7 +515,8 @@ class MLP_GFN(nn.Module):
         #loss calculation
         #CEloss = F.nll_loss(logits, y)
  
-        CEloss = nn.CrossEntropyLoss(reduction='none')(logits, y)
+        # CEloss = nn.CrossEntropyLoss(reduction='none')(logits, y)
+        CEloss = nn.MSELoss(reduction='none')(logits, y)  # @Dianbo, this is the only thing I changed here. Not sure what other changes are needed. --- Salem
         LL=-CEloss
         
         print("self.beta",self.beta)

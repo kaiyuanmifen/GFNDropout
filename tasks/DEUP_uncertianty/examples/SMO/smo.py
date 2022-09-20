@@ -1,4 +1,5 @@
-from .buffer import Buffer
+from buffer import Buffer
+from uncertaintylearning.models.GFNDropout import GFNDropout
 from uncertaintylearning.features.density_estimator import FixedSmoothKernelDensityEstimator
 from uncertaintylearning.features.variance_estimator import GPVarianceEstimator, ZeroVarianceEstimator
 from uncertaintylearning.features.distance_estimator import DistanceEstimator
@@ -192,6 +193,21 @@ def one_step_acquisition_mcdropout(oracle, full_train_X, full_train_Y, networks,
     return full_train_X, full_train_Y, model, candidate, candidate_image, state_dict
 
 
+def one_step_acquisition_gfnmcdropout(oracle, full_train_X, full_train_Y, networks, optimizers, epochs,
+    acq, q, bounds, dim, domain, domain_image, plot_stuff=False):
+
+    model = GFNDropout(full_train_X, full_train_Y, networks, optimizers)
+    model.fit(epochs)
+
+    candidate, EI = get_candidate(model, acq, full_train_Y, q, bounds, dim)
+
+    candidate_image = oracle(candidate)
+    full_train_X = torch.cat([full_train_X, candidate])
+    full_train_Y = torch.cat([full_train_Y, candidate_image])
+
+    state_dict = model.state_dict()
+    return full_train_X, full_train_Y, model, candidate, candidate_image, state_dict
+
 def one_step_acquisition(oracle, full_train_X, full_train_Y, features, buffer, networks, optimizers,
                          domain, epsilon, epochs, candidate, candidate_image, acq, q, use_log_unc, estimator,
                          step, bounds, dim, f_losses, e_losses, print_stuff=False, plot_stuff=False, domain_image=None,
@@ -342,6 +358,10 @@ def optimize(oracle, bounds, X_init, Y_init, model_type="",
             full_train_X, full_train_Y, model, candidate, candidate_image, state_dict = outs
         elif model_type == "mcdropout":
             outs = one_step_acquisition_mcdropout(oracle, full_train_X, full_train_Y, networks, optimizers, epochs,
+                                  acq, q,  bounds, dim, domain, domain_image, plot_stuff=plot_stuff)
+            full_train_X, full_train_Y, model, candidate, candidate_image, state_dict = outs
+        elif model_type == "gfnmcdropout":
+            outs = one_step_acquisition_gfnmcdropout(oracle, full_train_X, full_train_Y, networks, optimizers, epochs,
                                   acq, q,  bounds, dim, domain, domain_image, plot_stuff=plot_stuff)
             full_train_X, full_train_Y, model, candidate, candidate_image, state_dict = outs
         elif model_type == "ensemble":

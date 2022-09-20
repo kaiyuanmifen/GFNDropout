@@ -10,7 +10,7 @@ from botorch.fit import fit_gpytorch_model
 from gpytorch.mlls import VariationalELBO
 from gpytorch.likelihoods import SoftmaxLikelihood
 
-from due.dkl import DKL_GP, GP, initial_values_for_GP
+from due.dkl import DKL, GP, initial_values
 from uncertaintylearning.utils.resnet import ResNet18Spec
 
 # Taken from https://github.com/y0ast/deterministic-uncertainty-quantification/blob/master/utils/resnet_duq.py
@@ -245,7 +245,7 @@ class DUEVarianceSource:
         self.likelihood = self.likelihood.to(self.device)
 
     def fit(self, epochs=75, train_loader=None, save_path=None, val_loader=None):
-        initial_inducing_points, initial_lengthscale = initial_values_for_GP(
+        initial_inducing_points, initial_lengthscale = initial_values(
             train_loader.dataset, self.feature_extractor, self.n_inducing_points
         )
 
@@ -259,7 +259,7 @@ class DUEVarianceSource:
             lengthscale_prior=self.lengthscale_prior,
         )
 
-        self.model = DKL_GP(self.feature_extractor, self.gp)
+        self.model = DKL(self.feature_extractor, self.gp)
         self.model.to(self.device)
 
         self.likelihood = SoftmaxLikelihood(num_classes=10, mixing_weights=False)
