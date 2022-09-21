@@ -15,7 +15,7 @@ cd GFNDropout/tasks/Scripts/
 
 python -u ../image_classification/main.py train \
 										--model=ARMMLP \
-										--GFFN_dropout False \
+										--GFN_dropout False \
 										--dataset=iecu \
 										--lambas='[.0,.0,.0,.0]' \
 										--optimizer=adam \
@@ -33,11 +33,12 @@ python -u ../image_classification/main.py train \
 
 python -u ../image_classification/main.py train \
 										--model=ARMMLP \
-										--GFFN_dropout False \
+										--GFN_dropout False \
 										--dataset=iecu \
 										--lambas='[.0,.0,.0,.0]' \
 										--optimizer=adam \
 										--lr=0.001 \
+										--is_iecu True \
 										--add_noisedata=False \
 										--dptype True \
 										--concretedp False \
