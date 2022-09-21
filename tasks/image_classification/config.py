@@ -61,6 +61,8 @@ class DefaultConfig:
     mask="none"
     BNN=False
     beta=1.0
+    use_pretrained=False #whether to use pretrained model
+    Tune_last_layer_only=False
 
     seed = None
     use_gpu = False

@@ -21,7 +21,7 @@ conda activate GFlownets
  CUDA_LAUNCH_BLOCKING=1 python ../image_classification/main.py train \
 										--model=ResNet_GFN \
 										--GFN_dropout True \
-										--dataset=cifar10 \
+										--dataset=cifar100 \
 										--lambas=.001 \
 										--optimizer=momentum \
 										--lr=0.1 \
@@ -33,9 +33,9 @@ conda activate GFlownets
 										--ctype "Bernoulli" \
 										--dropout_distribution 'bernoulli' \
 										--model_name "_CIFAR_ResNet_GFN" \
-										--mask "topdown" \
+										--mask "upNdown" \
 										--BNN False \
 										--max_epoch 200 \
 										--mlp_dr 0.9 \
-										#--start_model "../../checkpoints/ARMWideResNet_GFN_CIFAR_ARMWideResNet_GFN_both_NN_base" \
-										
+										--Tune_last_layer_only True \
+										--use_pretrained True \	

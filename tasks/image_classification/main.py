@@ -198,9 +198,9 @@ def train(**kwargs):
     #format
     #TODO: neet to change
     if opt.GFN_dropout:
-        directory = '{}/{}_{}'.format(opt.checkpoints_dir, opt.model + opt.model_name+"_"+opt.mask+"_"+str(opt.BNN), current_time)
+        directory = '{}/{}_{}'.format(opt.checkpoints_dir, opt.model+opt.dataset + opt.model_name+"_"+opt.mask+"_"+str(opt.BNN)+"_"+str(opt.use_pretrained)+"_"+str(opt.Tune_last_layer_only), current_time)
     else:
-        directory = '{}/{}_{}'.format(opt.checkpoints_dir, opt.model + opt.model_name, current_time)
+        directory = '{}/{}_{}'.format(opt.checkpoints_dir, opt.model+opt.dataset + opt.model_name, current_time)
     
     #directory = '{}/{}'.format(opt.checkpoints_dir, opt.model + opt.model_name)
     

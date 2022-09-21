@@ -25,9 +25,15 @@ class ResNet_GFN(nn.Module):
 		self.num_classes=num_classes
 		self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 		#BNN version need to be coded
-
-		self.resnet = models.resnet18(pretrained=False, num_classes=num_classes)
-
+		
+		if opt.use_pretrained:
+			self.resnet = models.resnet18(pretrained=True, num_classes=1000)#the pretrained version has 1000 classes
+		
+			self.resnet.fc = nn.Linear(512, num_classes)
+		else:
+			
+			self.resnet = models.resnet18(pretrained=False, num_classes=num_classes)
+		
 		self.resnet.conv1 = torch.nn.Conv2d(
 			3, 64, kernel_size=3, stride=1, padding=1, bias=False
 		)
@@ -120,8 +126,10 @@ class ResNet_GFN(nn.Module):
 
 		# self.GFN_Z_scheduler = torch.optim.lr_scheduler.MultiStepLR(self.GFN_Z_optimizer, milestones=[200,300,350],gamma=0.2)
 
-
-		taskmodel_param_list = [{'params': self.resnet.parameters(), 'lr': lr}]
+		if self.opt.Tune_last_layer_only:
+			taskmodel_param_list = [{'params': self.resnet.fc.parameters(), 'lr': lr}]
+		else:
+			taskmodel_param_list = [{'params': self.resnet.parameters(), 'lr': lr}]
 
 		self.taskmodel_optimizer = optim.Adam(taskmodel_param_list)
 		self.taskmodel_scheduler = torch.optim.lr_scheduler.MultiStepLR(self.taskmodel_optimizer,
@@ -213,7 +221,7 @@ class ResNet_GFN(nn.Module):
 		
 		for layer_idx in range(len(self.maskgenerator_input_shapes)):
 		
-			if ("topdown" in mask) or ("upNdown" in mask):
+			if "topdown"==mask:
 				if layer_idx==0:
 					qz_mask_l,qz_p_l=self.q_z_mask_generators[layer_idx](torch.zeros(batch_size,784).to(device),temperature)#784 is an arbitary number here      
 					
@@ -350,7 +358,7 @@ class ResNet_GFN(nn.Module):
 							m=torch.ones(out.shape[0],out.shape[1]).to(device)
 
 						m=m.detach().clone()#mask should not interfere backbone model(MLP or resnet etc) training
-				 
+						
 						###calculate p(z;xi) and p(z|x;xi) both of which are needed for training
 						if layer_idx==0:
 							
@@ -492,7 +500,7 @@ class ResNet_GFN(nn.Module):
 			else:
 				self.taskmodel_optimizer.zero_grad()
 
-				taskmodel_loss=self.N*CEloss
+				taskmodel_loss=CEloss
 				taskmodel_loss.mean().backward(retain_graph=True)
 
 				#self.taskmodel_optimizer.step()
@@ -1039,27 +1047,27 @@ def construct_multiinput_conditional_mask_generators(
 
 
 class CNN_MLP(nn.Module):
-    def __init__(self, CNN_in_dim,mlp_in_dim, out_dim=10, activation=nn.LeakyReLU):
-        super().__init__()
+	def __init__(self, CNN_in_dim,mlp_in_dim, out_dim=10, activation=nn.LeakyReLU):
+		super().__init__()
    
 
-        self.CNN=CNN_(image_shape=CNN_in_dim, out_dim=10,hidden=784)
-        self.MLP=MLP(in_dim=mlp_in_dim, out_dim=10)
-        self.MLP_combine=MLP(in_dim=20, out_dim=out_dim)
+		self.CNN=CNN_(image_shape=CNN_in_dim, out_dim=10,hidden=784)
+		self.MLP=MLP(in_dim=mlp_in_dim, out_dim=10)
+		self.MLP_combine=MLP(in_dim=20, out_dim=out_dim)
 
 
-    def forward(self, x,y):
-        
-        '''
-        x should have shape batch x channels x H x W 
-        y should have shape batch x dim
-        '''
-        vec1=self.CNN(x)
-        vec2=self.MLP(y)
+	def forward(self, x,y):
+		
+		'''
+		x should have shape batch x channels x H x W 
+		y should have shape batch x dim
+		'''
+		vec1=self.CNN(x)
+		vec2=self.MLP(y)
 
-        output=self.MLP_combine(torch.cat([vec1,vec2],1))
+		output=self.MLP_combine(torch.cat([vec1,vec2],1))
 
-        return output
+		return output
 
 
 

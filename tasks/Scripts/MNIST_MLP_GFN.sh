@@ -33,7 +33,7 @@ python -u ../image_classification/main.py train \
 										--fixdistrdp False \
 										--ctype "Bernoulli" \
 										--dropout_distribution 'bernoulli' \
-										--mask "upNdown" \
+										--mask "none" \
 										--BNN False \
 										--model_name "_MNIST_MLP_GFN" \
 										--beta 1 \

@@ -508,7 +508,7 @@ class MLP_GFN(nn.Module):
 			else:
 				self.taskmodel_optimizer.zero_grad()
 
-				taskmodel_loss=self.N*CEloss
+				taskmodel_loss=CEloss
 				taskmodel_loss.mean().backward(retain_graph=True)
 
 				#self.taskmodel_optimizer.step()

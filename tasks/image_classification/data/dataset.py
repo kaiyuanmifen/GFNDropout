@@ -93,7 +93,7 @@ def cifar10(augment=True, batch_size=128):
 
     trainset=datasets.CIFAR10(dir+'/data', train=True, download=True,
                          transform=transform_train)
-
+    #subset of training for speed when needed
     indices = list(range(len(trainset)))#[0::5]
     trainset = torch.utils.data.Subset(trainset, indices)
 
@@ -101,9 +101,8 @@ def cifar10(augment=True, batch_size=128):
 
 
 
-    #subset of training for speed when needed
-    indices = list(range(len(trainset)))#[0::50]
-    trainset = torch.utils.data.Subset(trainset, indices)
+    # indices = list(range(len(trainset)))#[0::50]
+    # trainset = torch.utils.data.Subset(trainset, indices)
 
     testset=datasets.CIFAR10(dir+'/data', train=False, transform=transform_test)
     indices = list(range(len(testset)))#[0::100]
@@ -150,13 +149,37 @@ def cifar100(augment=True, batch_size=128):
 
     print(logging + ' CIFAR 100.')
     kwargs = {'num_workers': 4, 'pin_memory': torch.cuda.is_available()}
+
+
+    trainset=datasets.CIFAR100(dir+'/data', train=True, download=True,
+                         transform=transform_train)
+
+
+    #subset of training for speed when needed
+    indices = list(range(len(trainset)))#[0::50]
+    trainset = torch.utils.data.Subset(trainset, indices)
+    
+    trainset, validation_dataset = torch.utils.data.random_split(trainset, [int(0.7*len(trainset)), int(0.3*len(trainset))])
+    
+
+
+
     train_loader = torch.utils.data.DataLoader(
-        datasets.CIFAR100(dir+'/data', train=True, download=True,
-                         transform=transform_train),
+        trainset,
         batch_size=batch_size, shuffle=True, **kwargs)
+
+
     val_loader = torch.utils.data.DataLoader(
-        datasets.CIFAR100(dir+'/data', train=False, transform=transform_test),
+        validation_dataset,
         batch_size=batch_size, shuffle=True, **kwargs)
+    
+    testset=datasets.CIFAR100(dir+'/data', train=False, transform=transform_test)
+    indices = list(range(len(testset)))#[0::100]
+    testset = torch.utils.data.Subset(testset, indices)
+
+    test_loader = torch.utils.data.DataLoader(testset,
+        batch_size=batch_size, shuffle=False, **kwargs)
+
     num_classes = 100
 
-    return train_loader, val_loader, num_classes
+    return train_loader, val_loader,test_loader, num_classes
