@@ -21,6 +21,7 @@ parser.add_argument("--function", default='multi_optima', help='one of the keys 
 parser.add_argument("--noise", type=float, default=0, help='additive aleatoric noise')
 parser.add_argument("--method", default='deup', help='one of deup, gp, mcdropout, ensemble, gfnmcdropout')
 parser.add_argument("--save_base_path", default='.', help='path to save results')
+parser.add_argument("--small", action='store_true', help='use small network')
 
 args = parser.parse_args()
 
@@ -62,7 +63,10 @@ for seed in range(n_seeds):
                         epochs=200, plot_stuff=False, domain=X, domain_image=Y, n_steps=n_steps)
 
     elif args.method == 'mcdropout':
-        network = create_network(dim, 1, 128, 'relu', False, 3, 0.3)
+        if args.small:
+            network = create_network(dim, 1, 32, 'relu', False, 2)
+        else:
+            network = create_network(dim, 1, 128, 'relu', False, 3, 0.3)
         optimizer = create_optimizer(network, 1e-3)
         mcdropout_model = MCDropout(X_init, Y_init, network, optimizer, batch_size=64)
         outs = optimize(f, bounds, X_init, Y_init, model_type="mcdropout", networks=network, optimizers=optimizer,
@@ -70,8 +74,10 @@ for seed in range(n_seeds):
                         epochs=200, plot_stuff=False, domain=X, domain_image=Y, n_steps=n_steps)
     
     elif args.method == 'gfnmcdropout':
-        # network = MLP_GFN(dim, 1, layer_dims=(128, 128, 128))
-        network = MLP_GFN(dim, 1, layer_dims=(32, 32))
+        if args.small:
+            network = MLP_GFN(dim, 1, layer_dims=(32, 32))
+        else:
+            network = MLP_GFN(dim, 1, layer_dims=(128, 128, 128))
         optimizer = None  # @Dianbo, how do you define `opt` in MLP_GFN ??
         gfnmcdropout_model = GFNDropout(X_init, Y_init, network, optimizer, batch_size=16)
         outs = optimize(f, bounds, X_init, Y_init, model_type="gfnmcdropout", networks=network, optimizers=optimizer,
@@ -94,7 +100,8 @@ for seed in range(n_seeds):
                         estimator='gp')
     results[seed] = outs[0]
 
-string = f"{args.method}_{args.function}_{args.n_init}"
+model_size_string = "_small" if args.small else ""
+string = f"{args.method}_{args.function}_{args.n_init}{model_size_string}"
 filename = os.path.join(args.save_base_path, string)
 pickle.dump({'results': results, 'string': string}, open(filename, 'wb'))
 
