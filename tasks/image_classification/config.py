@@ -32,7 +32,8 @@ class DefaultConfig:
         gpus: number of gpus (default: 1)
         note: note shown in log title (default: '')
         verbose: verbose mode. (default: True)
-        print_freq: print frequency (default: 100) """
+        print_freq: print frequency (default: 100)
+        is_iecu: whether the data is iecu or not (default set to False) """
 
     model = 'ARMMLP_GFN'
     
@@ -146,6 +147,8 @@ class DefaultConfig:
     add_pi = False
     pruning = False
     pruingrate = 50
+
+    is_iecu = False
 
     #the below is the baseline version config
     #dptype = False
