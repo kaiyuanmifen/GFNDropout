@@ -70,7 +70,8 @@ for seed in range(n_seeds):
                         epochs=200, plot_stuff=False, domain=X, domain_image=Y, n_steps=n_steps)
     
     elif args.method == 'gfnmcdropout':
-        network = MLP_GFN(dim, 1, layer_dims=(128, 128, 128))
+        # network = MLP_GFN(dim, 1, layer_dims=(128, 128, 128))
+        network = MLP_GFN(dim, 1, layer_dims=(32, 32))
         optimizer = None  # @Dianbo, how do you define `opt` in MLP_GFN ??
         gfnmcdropout_model = GFNDropout(X_init, Y_init, network, optimizer, batch_size=16)
         outs = optimize(f, bounds, X_init, Y_init, model_type="gfnmcdropout", networks=network, optimizers=optimizer,

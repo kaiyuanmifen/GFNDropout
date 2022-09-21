@@ -55,12 +55,12 @@ class GFNDropout(BaseModel):
                 yi = yi.to(self.device)
                 #yi is not used for prediction but only as a placeholder here, mask type need to be given
                 metric=self.f_predictor._gfn_step(xi,yi,self.mask)#the model comes with itsown optimizer included
-                f_loss=metric["CEloss"]#this is CEloss used for classificaiton(MNIST) need to be changed to MSE for regression
+                f_loss=metric["CELoss"]#this is CEloss used for classificaiton(MNIST) need to be changed to MSE for regression
 
             self.epoch += 1
 
         return {
-            'f': f_loss.detach().item(),
+            'f': f_loss,
         }
 
     def _uncertainty(self, x,num_samples=100):
@@ -68,16 +68,17 @@ class GFNDropout(BaseModel):
         Computes uncertainty for input sample and
         returns total uncertainty estimate.
         """
-        _, var = get_dropout_uncertainty_estimate(self.f_predictor, x, num_samples=num_samples)
+        outputs = torch.cat([self.f_predictor(x, torch.zeros(x.shape[0],1), mask='upNdown').unsqueeze(0) for _ in range(num_samples)])
+        var = outputs.std(axis=0)
         var = var ** 2
         return var
 
-    def get_prediction_with_uncertainty(self, x):
+    def get_prediction_with_uncertainty(self, x, **kwargs):
         out = super().get_prediction_with_uncertainty(x)
         if out is None:
             self.eval()#om GFN mask, the mask is always on , so, eval() doesn not give you an mean
             y_fake=torch.zeros(x.shape[0],1)
-            mean = self.f_predictor(x,y_fake)#y is placeholder and not used during inference
+            mean = self.f_predictor(x, y_fake, mask="upNdown")#y is placeholder and not used during inference
             self.train()
             var = self._uncertainty(x)
             return mean, var
@@ -117,7 +118,7 @@ class MLP_GFN(nn.Module):
         self.fc = nn.ModuleList()
 
 
-        if opt.BNN==True:###if use Bayesian neural network backbone
+        if False==True:###if use Bayesian neural network backbone
             for i, dimh in enumerate(self.layer_dims):
                 inp_dim = self.input_dim if i == 0 else self.layer_dims[i - 1]
                 self.fc.append(bnn.BayesLinear(prior_mu=0, prior_sigma=0.01,
@@ -142,7 +143,7 @@ class MLP_GFN(nn.Module):
 
         ###construct the mask for GFFN
 
-        self.rand_mask_generator=RandomMaskGenerator(dropout_rate=opt.mlp_dr)
+        self.rand_mask_generator=RandomMaskGenerator(dropout_rate=0.9)
 
 
         self.p_zx_mask_generators=construct_conditional_mask_generators(layer_dims=layer_dims,
@@ -181,8 +182,8 @@ class MLP_GFN(nn.Module):
         z_lr=1e-1
         mg_lr_z=1e-3
         mg_lr_mu=1e-3
-        lr=opt.lr
-        self.beta=self.opt.beta #temperature on rewards
+        lr=1e-3
+        self.beta=1.0 #temperature on rewards
 
 
         
@@ -215,8 +216,8 @@ class MLP_GFN(nn.Module):
         {'params': self.out_layer.parameters(), 'lr': lr}]
 
         self.taskmodel_optimizer = optim.Adam(taskmodel_param_list)
-        self.taskmodel_scheduler = torch.optim.lr_scheduler.MultiStepLR(self.taskmodel_optimizer,
-         milestones=self.opt.schedule_milestone,gamma=0.2)
+        # self.taskmodel_scheduler = torch.optim.lr_scheduler.MultiStepLR(self.taskmodel_optimizer,
+        #  milestones=[0],gamma=0.2)
 
 
         self.to(self.device)
@@ -226,7 +227,7 @@ class MLP_GFN(nn.Module):
     def score(self, x):
         return self.output(x.view(-1, self.input_dim))
 
-    def forward(self, x, y,mask):
+    def forward(self, x, y, mask):
 
 
         #using GFlownet
@@ -267,7 +268,7 @@ class MLP_GFN(nn.Module):
         ###during inference y are not used 
 
         x=x.reshape(x.shape[0],-1)
-        y=torch.nn.functional.one_hot(y, self.num_classes)#convert to one hot vector
+        # y=torch.nn.functional.one_hot(y, self.num_classes)#convert to one hot vector
         batch_size,input_dim=x.shape[0],x.shape[1]
         
             
@@ -340,7 +341,7 @@ class MLP_GFN(nn.Module):
             
 
             ####version sample weights and biases
-            if self.opt.BNN:
+            if False:
 
                 weight_ = self.fc[layer_idx].weight_mu+ torch.exp(self.fc[layer_idx].weight_log_sigma) * torch.randn_like(self.fc[layer_idx].weight_log_sigma).to(device) 
                 bias_ = self.fc[layer_idx].bias_mu + torch.exp(self.fc[layer_idx].bias_log_sigma) * torch.randn_like(self.fc[layer_idx].bias_log_sigma).to(device)
@@ -474,7 +475,7 @@ class MLP_GFN(nn.Module):
 
         ####output final prediction
 
-        if self.opt.BNN:
+        if False:
             ###apply the task model
             weight_ = self.out_layer.weight_mu + torch.exp(self.out_layer.weight_log_sigma) * torch.randn_like(self.out_layer.weight_log_sigma).to(device) 
             bias_ = self.out_layer.bias_mu + torch.exp(self.out_layer.bias_log_sigma) * torch.randn_like(self.out_layer.bias_log_sigma).to(device)
@@ -519,8 +520,6 @@ class MLP_GFN(nn.Module):
         CEloss = nn.MSELoss(reduction='none')(logits, y)  # @Dianbo, this is the only thing I changed here. Not sure what other changes are needed. --- Salem
         LL=-CEloss
         
-        print("self.beta",self.beta)
-
 
         LogR_unconditional=self.beta*self.N*LL.detach().clone()+Log_pz.detach().clone()
         GFN_loss_unconditional=(LogZ_unconditional+LogPF_qz-LogR_unconditional-LogPB_qz)**2#+kl_weight*kl#jointly train the last layer BNN and the mask generator
@@ -563,7 +562,7 @@ class MLP_GFN(nn.Module):
 
 
             #train task model by maximizing ELBO
-            if self.opt.BNN==True:
+            if False==True:
 
                 #a different equation if using BNN
                 
@@ -615,7 +614,7 @@ class MLP_GFN(nn.Module):
 
                 
                 #train task model by maximizing ELBO
-                if self.opt.BNN==True:
+                if False==True:
 
                     #a different equation if using BNN
                     
@@ -670,7 +669,7 @@ class MLP_GFN(nn.Module):
 
                 
                 #train task model by maximizing ELBO
-                if self.opt.BNN==True:
+                if False==True:
 
                     #a different equation if using BNN
                     
@@ -945,7 +944,7 @@ def construct_unconditional_mask_generators(
     for layer_idx in range(len(layer_dims)):
 
         if layer_idx==0:
-            in_dim=784
+            in_dim=1#784
             out_dim=layer_dims[layer_idx]
         
         else:

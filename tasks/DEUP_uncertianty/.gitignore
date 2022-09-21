@@ -3,6 +3,3 @@ __pycache__
 *.egg-info
 
 settings.json
-
-tasks/DEUP_uncertianty/deup_multi_optima_6
-tasks/DEUP_uncertianty/gp_multi_optima_6
