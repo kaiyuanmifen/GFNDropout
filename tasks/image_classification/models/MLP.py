@@ -15,6 +15,13 @@ class ARMMLP(nn.Module):
 
         self.opt=opt
         self.layer_dims = layer_dims
+        self.iecu = self.opt.is_iecu
+        
+        if self.iecu:
+            input_dim = 1400
+            num_classes = 2
+            N = 128
+        
         self.input_dim = input_dim
         self.N = N
         self.weight_decay = N * weight_decay
@@ -45,7 +52,10 @@ class ARMMLP(nn.Module):
             self.steps_ema = 0.
 
     def score(self, x):
-        return self.output(x.view(-1, self.input_dim))
+        if self.iecu == False:
+            return self.output(x.view(-1, self.input_dim))
+        else:
+            return self.output(x)
 
     def cluster_penalty(self, pi, label):
         # pi batch size x features, label, batch size
@@ -366,5 +376,3 @@ class ARMMLP(nn.Module):
         for layer in self.layers:
             layer.mask_threshold = threshold
         print('th', threshold)
-
-

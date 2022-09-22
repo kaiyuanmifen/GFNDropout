@@ -35,23 +35,43 @@ class Dataset(torch.utils.data.Dataset):
 def iecu(augment=False, batch_size=128):
     path = "/home/mila/b/bonaventure.dossou/iecu_data.csv"
     iecu_dataset = pd.read_csv(path, delimiter=",")
-    targets = iecu_dataset["Death"].values
-    iecu_dataset.drop(columns=['Death'], inplace=True)
+    # top 3 groups are 73, 167 and 264 respectively with 6724, 5544 and 5091 patients
+    # we select the hospital with highest number of patient as training dataset
+    train_hospitals_ids = [73]
+    # we select the hospital with 2nd highest number of patient as testing dataset
+    test_hospitals_ids = [167]
+
+    training_set = iecu_dataset[iecu_dataset.hospitalid.isin(hospitals_ids)]    
+    testing_set = iecu_dataset[iecu_dataset.hospitalid.isin(test_hospitals_ids)]
+
+    training_targets = training_set["Death"].values
+    testing_targets = other_sets["Death"].values
+
+    training_set.drop(columns=['Death'], inplace=True)    
+    testing_set.drop(columns=['Death'], inplace=True)
     
     if opt.model == "MLP_GFN":
-        features = iecu_dataset.values[:, :1369]
-        features = features.reshape(-1, 37, 37)
+        
+        training_features = training_set.values[:, :1369]
+        testing_features = testing_set.values[:, :1369]
+
+        training_features = training_features.reshape(-1, 37, 37)
+        testing_features = testing_features.reshape(-1, 37, 37)
     else:
-        features = iecu_dataset.values
 
-    train_data, eval_test_data, train_labels, eval_test_labels = train_test_split(features, targets, test_size=0.3,
-                                                                                  random_state=1234)  # 70:30
-    eval_data, test_data, eval_data_labels, test_data_labels = train_test_split(eval_test_data, eval_test_labels, test_size=0.3,
-                                                                                random_state=1234) #  70:30
+        training_features = training_set.values        
+        testing_features = testing_set.values
 
-    iecu_train_dataset = Dataset(torch.tensor(train_data).float(), torch.tensor(train_labels))
+    train_data, eval_data, train_data_labels, eval_data_labels = train_test_split(training_features, training_targets, test_size=0.1,
+                                                                                random_state=1234, stratify=other_sets_targets) #  90:10
+
+    print('Training Set size: {}'.format(len(train_data_labels)))
+    print('Validation Set size: {}'.format(len(eval_data_labels)))
+    print('Testing Set size: {}'.format(len(testing_targets)))
+
+    iecu_train_dataset = Dataset(torch.tensor(train_data).float(), torch.tensor(train_data_labels))
     iecu_valid_dataset = Dataset(torch.tensor(eval_data).float(), torch.tensor(eval_data_labels))
-    iecu_test_dataset = Dataset(torch.tensor(test_data).float(), torch.tensor(test_data_labels))
+    iecu_test_dataset = Dataset(torch.tensor(testing_features).float(), torch.tensor(testing_targets))
 
     train_loader = torch.utils.data.DataLoader(iecu_train_dataset, batch_size=batch_size, shuffle=True)
     validation_loader = torch.utils.data.DataLoader(iecu_valid_dataset, batch_size=batch_size, shuffle=False)
@@ -59,7 +79,6 @@ def iecu(augment=False, batch_size=128):
 
     num_classes = 2
 
-    # print(torch.tensor(train_data).float().size())
     return train_loader, validation_loader, test_loader, num_classes
 
 
