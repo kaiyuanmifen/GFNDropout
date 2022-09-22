@@ -45,7 +45,7 @@ def iecu(augment=False, batch_size=128):
     testing_set = iecu_dataset[iecu_dataset.hospitalid.isin(test_hospitals_ids)]
 
     training_targets = training_set["Death"].values
-    testing_targets = other_sets["Death"].values
+    testing_targets = testing_set["Death"].values
 
     training_set.drop(columns=['Death'], inplace=True)    
     testing_set.drop(columns=['Death'], inplace=True)
