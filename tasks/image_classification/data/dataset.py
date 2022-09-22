@@ -63,7 +63,7 @@ def iecu(augment=False, batch_size=128):
         testing_features = testing_set.values
 
     train_data, eval_data, train_data_labels, eval_data_labels = train_test_split(training_features, training_targets, test_size=0.1,
-                                                                                random_state=1234, stratify=training_targets) #  90:10
+                                                                                random_state=1234) #  90:10
 
     print('Training Set size: {}'.format(len(train_data_labels)))
     print('Validation Set size: {}'.format(len(eval_data_labels)))
