@@ -41,7 +41,7 @@ def iecu(augment=False, batch_size=128):
     # we select the hospital with 2nd highest number of patient as testing dataset
     test_hospitals_ids = [167]
 
-    training_set = iecu_dataset[iecu_dataset.hospitalid.isin(hospitals_ids)]    
+    training_set = iecu_dataset[iecu_dataset.hospitalid.isin(train_hospitals_ids)]    
     testing_set = iecu_dataset[iecu_dataset.hospitalid.isin(test_hospitals_ids)]
 
     training_targets = training_set["Death"].values
