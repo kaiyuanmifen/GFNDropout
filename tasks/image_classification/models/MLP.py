@@ -18,13 +18,14 @@ class ARMMLP(nn.Module):
         self.iecu = self.opt.is_iecu
         
         if self.iecu:
-            input_dim = 1400
+            input_dim = 1369
             num_classes = 2
-            N = 128
+            # N = 128
         
         self.input_dim = input_dim
         self.N = N
-        self.weight_decay = N * weight_decay
+        self.weight_decay = weight_decay # N * weight_decay
+        print('jlkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk', self.weight_decay)
         self.lambas = lambas
         self.epoch = 0
         self.elbo = 0

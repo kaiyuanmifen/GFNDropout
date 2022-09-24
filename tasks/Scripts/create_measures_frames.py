@@ -3,7 +3,7 @@ import os
 import pandas as pd
 
 base_path_ckpt = "/home/mila/b/bonaventure.dossou/GFNDropout/checkpoints/"
-testing_predictions = pd.read_csv("/home/mila/b/bonaventure.dossou/GFNDropout/tasks/Scripts/iecu_mlp_all_results.csv", header=None)
+testing_predictions = pd.read_csv("/home/mila/b/bonaventure.dossou/GFNDropout/tasks/Scripts/testresult.csv", header=None)
 
 methods_saving_points = [x[0] for x in os.walk(base_path_ckpt)][1:]
 methods_names_list, iid_acc_list, ood_acc_list = [], [], []

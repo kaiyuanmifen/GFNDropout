@@ -32,16 +32,20 @@ class Dataset(torch.utils.data.Dataset):
         )
 
 
-def iecu(augment=False, batch_size=128):
+def iecu(augment=False, batch_size=256):
     path = "/home/mila/b/bonaventure.dossou/iecu_data.csv"
     iecu_dataset = pd.read_csv(path, delimiter=",")
     # top 3 groups are 73, 167 and 264 respectively with 6724, 5544 and 5091 patients
     # we select the hospital with highest number of patient as training dataset
-    train_hospitals_ids = [73]
+    # train_hospitals_ids = [73]
     # we select the hospital with 2nd highest number of patient as testing dataset
     test_hospitals_ids = [167]
 
-    training_set = iecu_dataset[iecu_dataset.hospitalid.isin(train_hospitals_ids)]    
+    iecu_dataset = iecu_dataset.sample(frac=1)
+
+    # trying to implement the last idea I mentionned in the group    
+    # training_set = iecu_dataset[iecu_dataset.hospitalid.isin(train_hospitals_ids)]    
+    training_set = iecu_dataset[iecu_dataset.hospitalid != 167]    
     testing_set = iecu_dataset[iecu_dataset.hospitalid.isin(test_hospitals_ids)]
 
     training_targets = training_set["Death"].values
@@ -49,21 +53,15 @@ def iecu(augment=False, batch_size=128):
 
     training_set.drop(columns=['Death'], inplace=True)    
     testing_set.drop(columns=['Death'], inplace=True)
+
+    training_features = training_set.values[:, :1369]
+    testing_features = testing_set.values[:, :1369]
     
     if opt.model == "MLP_GFN":
-        
-        training_features = training_set.values[:, :1369]
-        testing_features = testing_set.values[:, :1369]
-
         training_features = training_features.reshape(-1, 37, 37)
         testing_features = testing_features.reshape(-1, 37, 37)
-    else:
 
-        training_features = training_set.values        
-        testing_features = testing_set.values
-
-    train_data, eval_data, train_data_labels, eval_data_labels = train_test_split(training_features, training_targets, test_size=0.1,
-                                                                                random_state=1234) #  90:10
+    train_data, eval_data, train_data_labels, eval_data_labels = train_test_split(training_features, training_targets, test_size=0.3) #  90:10
 
     print('Training Set size: {}'.format(len(train_data_labels)))
     print('Validation Set size: {}'.format(len(eval_data_labels)))

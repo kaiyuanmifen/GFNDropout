@@ -25,7 +25,7 @@ class MLP_GFN(nn.Module):
 			# layer_dims=(1402, 1402, 1402)
 			input_dim = 1369
 			num_classes = 2
-			N = 128
+			# N = 128
 
 		self.device=torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 		self.layer_dims = layer_dims
