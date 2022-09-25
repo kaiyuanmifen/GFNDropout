@@ -23,6 +23,7 @@ from six.moves import cPickle
 # import seaborn as sns; sns.set()
 from ece import ECELoss
 from random import randrange
+from sklearn.metrics import f1_score, recall_score, precision_score, balanced_accuracy_score
 
 def setup_seed(seed):
     torch.manual_seed(seed)
@@ -468,6 +469,8 @@ def val(model, dataloader, criterion, num_classes, opt):
     label_tensors = torch.zeros([0], dtype=torch.int64)
     score_tensors = torch.zeros([0], dtype=torch.float32)
 
+    f1_preds, recall_preds, precision_preds, balanced_accs = [], [], [], []
+
     
     for ii, data in enumerate(dataloader):
         input_, label = data
@@ -538,7 +541,6 @@ def val(model, dataloader, criterion, num_classes, opt):
             # important step !!!!!!
             if opt.GFN_dropout==True:
                 score = model(input_, label,opt.mask)
-            
             else:
                 score = model(input_, label)
             
@@ -557,6 +559,17 @@ def val(model, dataloader, criterion, num_classes, opt):
         ave_prob = torch.mean(prob, 2)
         # prediction = torch.argmax(ave_prob, 1).to(device)
         prediction = torch.argmax(torch.from_numpy(logits_greedy), 1).to(device) #TODO: use greedy or sample?
+        
+        # F1-score
+        pred_idx = prediction.detach().cpu().numpy()
+        labels = label.detach().cpu().numpy()
+        f1_preds.append(f1_score(labels, pred_idx, average='macro'))
+        recall_preds.append(recall_score(labels, pred_idx, average='macro'))
+        precision_preds.append(precision_score(labels, pred_idx, average='macro'))
+        balanced_accs.append(balanced_accuracy_score(labels, pred_idx))
+
+        #################################################################
+
         accurate_pred_i = (prediction == label).type_as(logits_tsam)
         accurate_pred = torch.cat([accurate_pred, accurate_pred_i], 0)
         testresult_i = torch.from_numpy(two_sample_test_batch(logits_tsam)).type_as(logits_tsam)
@@ -618,7 +631,10 @@ def val(model, dataloader, criterion, num_classes, opt):
     if opt.GFN_dropout==False:
         vis.plot("prune_rate", model.prune_rate() if opt.gpus <= 1 else model.module.prune_rate())
     #return accuracy_meter.value()[0], loss_meter.value()[0], label_dict, logits_dict
-    return accuracy_meter_greedy.value()[0], loss_meter_greedy.value()[0], label_dict, input__dict, logits_dict, logits_dict_greedy, base_aic, up, ucpred, ac_prob, iu_prob, np.mean(elbo_list)*100, ece
+    if opt.is_iecu:
+        return (np.mean(f1_preds), np.mean(recall_preds), np.mean(precision_preds), np.mean(balanced_accs)), loss_meter_greedy.value()[0], label_dict, input__dict, logits_dict, logits_dict_greedy, base_aic, up, ucpred, ac_prob, iu_prob, np.mean(elbo_list)*100, ece
+    else:
+        return accuracy_meter_greedy.value()[0], loss_meter_greedy.value()[0], label_dict, input__dict, logits_dict, logits_dict_greedy, base_aic, up, ucpred, ac_prob, iu_prob, np.mean(elbo_list)*100, ece
     #accuracy_meter.value()[0], loss_meter.value()[0]
 
 
@@ -655,13 +671,19 @@ def test(**kwargs):
         val_accuracy, val_loss, label_dict, input__dict, logits_dict, logits_dict_greedy, base_aic, up, ucpred, ac_prob, iu_prob, elbo, ece = val(model, test_loader, criterion, num_classes, opt)
         
         if opt.GFN_dropout==False:
-            print("augment_test:{augment_test} loss:{loss:.2f},val_acc:{val_acc:.2f}, uncer:{base_aic_1:.2f}, {base_aic_2:.2f},{base_aic_3:.2f}, up:{up_1:.2f}, {up_2:.2f},{up_3:.2f}, prune_rate:{pr:.2f}, elbo:{elbo:.2f}, ece:{ece:.4f}"
-                  .format(augment_test=opt.augment_test,loss=val_loss, val_acc=val_accuracy, base_aic_1=base_aic[0], base_aic_2=base_aic[1],
-                              base_aic_3=base_aic[2], up_1=up[0],up_2=up[1],up_3=up[2], elbo=elbo , pr=model.prune_rate()if opt.gpus <= 1 else model.module.prune_rate(), ece = ece[0]))
-        else:            
-            print("augment_test:{augment_test} loss:{loss:.2f},val_acc:{val_acc:.2f}, uncer:{base_aic_1:.2f}, {base_aic_2:.2f},{base_aic_3:.2f}, up:{up_1:.2f}, {up_2:.2f},{up_3:.2f}, elbo:{elbo:.2f}, ece:{ece:.4f}"
-                  .format(augment_test=opt.augment_test,loss=val_loss, val_acc=val_accuracy, base_aic_1=base_aic[0], base_aic_2=base_aic[1],
-                              base_aic_3=base_aic[2], up_1=up[0],up_2=up[1],up_3=up[2], elbo=elbo , ece = ece[0]))
+            if opt.is_iecu:
+                print('Macro F1-score: {}, Macro Recall: {}, Mean Precision: {}, Mean Balanced Accuracy: {}'.format(val_accuracy[0], val_accuracy[1], val_accuracy[2], val_accuracy[3]))
+            else:            
+                print("augment_test:{augment_test} loss:{loss:.2f},val_acc:{val_acc:.2f}, uncer:{base_aic_1:.2f}, {base_aic_2:.2f},{base_aic_3:.2f}, up:{up_1:.2f}, {up_2:.2f},{up_3:.2f}, prune_rate:{pr:.2f}, elbo:{elbo:.2f}, ece:{ece:.4f}"
+                      .format(augment_test=opt.augment_test,loss=val_loss, val_acc=val_accuracy, base_aic_1=base_aic[0], base_aic_2=base_aic[1],
+                                  base_aic_3=base_aic[2], up_1=up[0],up_2=up[1],up_3=up[2], elbo=elbo , pr=model.prune_rate()if opt.gpus <= 1 else model.module.prune_rate(), ece = ece[0]))
+        else:
+            if opt.is_iecu:
+                print('Macro F1-score: {}, Macro Recall: {}, Mean Precision: {}, Mean Balanced Accuracy: {}'.format(val_accuracy[0], val_accuracy[1], val_accuracy[2], val_accuracy[3]))
+            else:
+                print("augment_test:{augment_test} loss:{loss:.2f},val_acc:{val_acc:.2f}, uncer:{base_aic_1:.2f}, {base_aic_2:.2f},{base_aic_3:.2f}, up:{up_1:.2f}, {up_2:.2f},{up_3:.2f}, elbo:{elbo:.2f}, ece:{ece:.4f}"
+                      .format(augment_test=opt.augment_test,loss=val_loss, val_acc=val_accuracy, base_aic_1=base_aic[0], base_aic_2=base_aic[1],
+                                  base_aic_3=base_aic[2], up_1=up[0],up_2=up[1],up_3=up[2], elbo=elbo , ece = ece[0]))
 
 
         # print(model.get_activated_neurons())

@@ -28,7 +28,7 @@ python -u ../image_classification/main.py test \
 										--ctype "Bernoulli" \
 										--dropout_distribution 'bernoulli' \
 										--model_name "_IECU_ARMMLP_Concrete" \
-										--load_file="/home/mila/b/bonaventure.dossou/GFNDropout/checkpoints/ARMMLP_IECU_ARMMLP_Concrete_20220923193144/best.model" \
+										--load_file="/home/mila/b/bonaventure.dossou/GFNDropout/checkpoints/ARMMLP_IECU_ARMMLP_Concrete_20220923221017/best.model" \
 
 
 python -u ../image_classification/main.py test \
@@ -46,7 +46,7 @@ python -u ../image_classification/main.py test \
 										--ctype "Bernoulli" \
 										--dropout_distribution 'bernoulli' \
 										--model_name "_IECU_ARMMLP_Contextual" \
-										--load_file="/home/mila/b/bonaventure.dossou/GFNDropout/checkpoints/ARMMLP_IECU_ARMMLP_Contextual_20220923193431/best.model" \
+										--load_file="/home/mila/b/bonaventure.dossou/GFNDropout/checkpoints/ARMMLP_IECU_ARMMLP_Contextual_20220924001210/best.model" \
 
 python -u ../image_classification/main.py test \
 										--model=MLP_GFN \
@@ -66,7 +66,7 @@ python -u ../image_classification/main.py test \
 										--BNN False \
 										--model_name "_IECU_MLP_GFN" \
 										--beta 0.001 \
-										--load_file="/home/mila/b/bonaventure.dossou/GFNDropout/checkpoints/MLP_GFN_IECU_MLP_GFN_random_False_20220923193815/best.model" \
+										--load_file="/home/mila/b/bonaventure.dossou/GFNDropout/checkpoints/MLP_GFN_IECU_MLP_GFN_random_False_20220924013941/best.model" \
 										
 
 python -u ../image_classification/main.py test \
@@ -88,7 +88,7 @@ python -u ../image_classification/main.py test \
 										--model_name "_IECU_MLP_GFN" \
 										--beta 0.001 \
 										--max_epoch 100 \
-										--load_file="/home/mila/b/bonaventure.dossou/GFNDropout/checkpoints/MLP_GFN_IECU_MLP_GFN_none_False_20220923194044/best.model" \
+										--load_file="/home/mila/b/bonaventure.dossou/GFNDropout/checkpoints/MLP_GFN_IECU_MLP_GFN_none_False_20220924025457/best.model" \
 
 
 python -u ../image_classification/main.py test \
@@ -109,7 +109,7 @@ python -u ../image_classification/main.py test \
 										--BNN False \
 										--model_name "_IECU_MLP_GFN" \
 										--beta 0.001 \
-										--load_file="/home/mila/b/bonaventure.dossou/GFNDropout/checkpoints/MLP_GFN_IECU_MLP_GFN_topdown_False_20220923194302/best.model" \
+										--load_file="/home/mila/b/bonaventure.dossou/GFNDropout/checkpoints/MLP_GFN_IECU_MLP_GFN_topdown_False_20220924092129/best.model" \
 
 python -u ../image_classification/main.py test \
 										--model=MLP_GFN \
@@ -129,7 +129,7 @@ python -u ../image_classification/main.py test \
 										--BNN False \
 										--model_name "_IECU_MLP_GFN" \
 										--beta 0.001 \
-										--load_file="/home/mila/b/bonaventure.dossou/GFNDropout/checkpoints/MLP_GFN_IECU_MLP_GFN_bottomup_False_20220923194658/best.model" \
+										--load_file="/home/mila/b/bonaventure.dossou/GFNDropout/checkpoints/MLP_GFN_IECU_MLP_GFN_bottomup_False_20220924143304/best.model" \
 
 python -u ../image_classification/main.py test \
 										--model=MLP_GFN \
@@ -149,4 +149,4 @@ python -u ../image_classification/main.py test \
 										--BNN False \
 										--model_name "_IECU_MLP_GFN" \
 										--beta 0.001 \
-										--load_file="/home/mila/b/bonaventure.dossou/GFNDropout/checkpoints/MLP_GFN_IECU_MLP_GFN_upNdown_False_20220923195232/best.model" \
+										--load_file="/home/mila/b/bonaventure.dossou/GFNDropout/checkpoints/MLP_GFN_IECU_MLP_GFN_upNdown_False_20220924164117/best.model" \
