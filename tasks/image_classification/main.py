@@ -18,6 +18,7 @@ import torch.nn.functional as F
 import random
 import scipy.stats as sts
 #updating
+import pandas as pd
 from six.moves import cPickle
 # import matplotlib.pyplot as plt
 # import seaborn as sns; sns.set()
@@ -816,10 +817,11 @@ def augment_new_dataset(directory, **kwargs):
     def criterion(output, target_var):
         loss = nn.CrossEntropyLoss().to(device)(output, target_var.long())
         if opt.GFN_dropout:
-            total_loss =loss
+            total_loss = loss
         else:
             total_loss = (loss + model.regularization() if opt.gpus <= 1 else model.module.regularization()).to(device)
         return total_loss
+
     # vis = Visualizer(opt.log_dir, opt.model, current_time)
     train_loader, val_loader, test_loader, num_classes = getattr(dataset, opt.dataset)(opt.batch_size)
     model = getattr(models, opt.model)(lambas=opt.lambas, num_classes=num_classes, weight_decay=opt.weight_decay,
@@ -831,31 +833,54 @@ def augment_new_dataset(directory, **kwargs):
                                                                                                     num_classes,
                                                                                                     opt)
     uncertainties = uncertainty_logits(input__dict, logits_dict, 1000)
-
     # append the new high-uncertain inputs to the the training dataset
-    print('Old size of dataset: {}'.format(len(train_loader)))
     X = train_loader.dataset.getX()
     Y = train_loader.dataset.getY()
-    print('Passed')
-    for batch, ((input_, uncertainty), label) in enumerate(zip(uncertainties, list(predicted_labels_dict.values()))):
+    for batch, ((input_, uncertainty), key_label) in enumerate(zip(uncertainties, predicted_labels_dict.items())):
         if batch > 999:  # index starts by 0 so 0-999 = 1k elements 
             break
         else:
-            X = torch.cat((X, torch.tensor(input_).float()), 0)
-            Y = torch.cat((Y, torch.tensor(label).float()), 0)
+            label_ = list(key_label)[1]
+        X = torch.cat((X, torch.tensor(input_).float()), 0)
+        Y = torch.cat((Y, torch.tensor(label_).float()), 0)
 
     train_loader.dataset.setX(X)
     train_loader.dataset.setY(Y)
-
+    
     # TODO: Find a way to remove the top-k from the augmenting dataset
     print('New size of dataset: {}'.format(len(train_loader)))
     kwargs['new_data'] = (train_loader, val_loader, test_loader, num_classes)
     return kwargs
 
+def get_al_test_loader():
+    path_test_set = "/home/mila/b/bonaventure.dossou/iecu_al_test.csv"
+    testing_set = pd.read_csv(path_test_set, delimiter=",")
+    testing_targets = testing_set["Death"].values
+
+    testing_set.drop(columns=['Death'], inplace=True)
+    testing_features = testing_set.values[:, :1369]
+
+    if opt.model == "MLP_GFN":
+        testing_features = testing_features.reshape(-1, 37, 37)
+
+    iecu_test_dataset = dataset.Dataset(torch.tensor(testing_features).float(), torch.tensor(testing_targets))
+    test_loader = torch.utils.data.DataLoader(iecu_test_dataset, batch_size=len(iecu_test_dataset), shuffle=False)
+    return test_loader
 
 def active_learning(**kwargs):
     global device
     opt.parse(kwargs)
+
+    # testing AL set
+    real_test_loader = get_al_test_loader()
+
+    def criterion(output, target_var):
+        loss = nn.CrossEntropyLoss().to(device)(output, target_var.long())
+        if opt.GFN_dropout:
+            total_loss = loss
+        else:
+            total_loss = (loss + model.regularization() if opt.gpus <= 1 else model.module.regularization()).to(device)
+        return total_loss
 
     # finetune on the starting set
     kwargs['al_round'] = 0
@@ -868,6 +893,32 @@ def active_learning(**kwargs):
         # train on new dataset
         print('Active Learning Round: {}'.format(al_round + 1))
         directory_model = train(active_learning=True, **kwargs)
+
+    # testing the AL model
+    directory_model = directory_model + '/best.model'
+    opt.parse(kwargs)
+
+    train_loader, val_loader, test_loader, num_classes = getattr(dataset, opt.dataset)(opt.batch_size)
+
+    model = getattr(models, opt.model)(lambas=opt.lambas, num_classes=num_classes, weight_decay=opt.weight_decay,
+                                       opt=opt).to(device)
+    model.load_state_dict(torch.load(directory_model, map_location=device))
+    metrics, _, _, _, logits_dict, _, _, _, _, _, _, _, _, _ = val(model, real_test_loader, criterion, num_classes, opt)
+
+    frame = pd.DataFrame()
+    frame['method'] = [str(opt.model_name)]
+    frame['al_f1_score'] = [metrics[0]]
+    frame['al_recall_score'] = [metrics[1]]
+    frame['al_precision_score'] = [metrics[2]]
+    frame['al_balAcc_score'] = [metrics[3]]
+    logits_ = list(logits_dict.items())
+    frame['dempster_shafer_uncertainty'] = [dempster_shafer(logits_[0][1]).mean().item()]
+    if opt.model_name != "MLP_GFN":
+    	frame.to_csv('/home/mila/b/bonaventure.dossou/GFNDropout/tasks/Scripts/{}.csv'.format(str(opt.model_name)),
+                 index=False)
+    else:
+    	frame.to_csv('/home/mila/b/bonaventure.dossou/GFNDropout/tasks/Scripts/{}_{}.csv'.format(str(opt.model_name), str(opt.mask)),
+                 index=False)
 
 def help():
     '''help'''

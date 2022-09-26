@@ -84,7 +84,7 @@ class ARMMLP(nn.Module):
                 kl_loss.backward(retain_graph = True)
             else:
                 score = self.score(x)
-                self.elbo = self.elbo_fun(nn.CrossEntropyLoss(reduce=False)(score, y).data)
+                self.elbo = self.elbo_fun(nn.CrossEntropyLoss(reduce=False)(score, y.long()).data)
             return score
         elif self.opt.dptype:
             # include se and gumbel, and ARM
@@ -158,7 +158,7 @@ class ARMMLP(nn.Module):
                                         pseudo_traj = nn.ReLU()(pseudo_traj)
                                     f1_kl = f1_kl + self.layers[k].post_nll_true - self.layers[k].prior_nll_true
                                 pseudo_score = pseudo_traj
-                                f1 = nn.CrossEntropyLoss(reduce=False)(pseudo_score, y).data - self.opt.lambda_kl * f1_kl.data
+                                f1 = nn.CrossEntropyLoss(reduce=False)(pseudo_score, y.long()).data - self.opt.lambda_kl * f1_kl.data
                                 f1 = f1 / f1.size(0)
                                 f1app.append(f1)
                                 update_flag.append(True)
@@ -167,7 +167,7 @@ class ARMMLP(nn.Module):
                                 update_flag.append(False)
                             out = main_traj
                         score = out
-                        f2 = nn.CrossEntropyLoss(reduce=False)(score, y).data - self.opt.lambda_kl * f2_kl.data
+                        f2 = nn.CrossEntropyLoss(reduce=False)(score, y.long()).data - self.opt.lambda_kl * f2_kl.data
                         f2 = f2 / f2.size(0)
                         self.update_phi_gradient(f1app, f2, update_flag)
                         if self.opt.learn_prior:
@@ -180,7 +180,7 @@ class ARMMLP(nn.Module):
             else:
                 self.forward_mode([True] * len(self.layers))
                 score = self.score(x)
-                self.elbo = self.elbo_fun(nn.CrossEntropyLoss(reduce=False)(score, y).data)
+                self.elbo = self.elbo_fun(nn.CrossEntropyLoss(reduce=False)(score, y.long()).data)
             return score
         else:
             if self.opt.concretedp:
@@ -209,7 +209,7 @@ class ARMMLP(nn.Module):
                     else:
                         self.forward_mode(True)
                         score = self.score(x)
-                        self.elbo = self.elbo_fun(nn.CrossEntropyLoss(reduce=False)(score, y).data)
+                        self.elbo = self.elbo_fun(nn.CrossEntropyLoss(reduce=False)(score, y.long()).data)
                 else:
                     if self.training:
                         self.forward_mode(True)
@@ -227,14 +227,14 @@ class ARMMLP(nn.Module):
                         if self.opt.ar is not True:
                             self.forward_mode(False)
                             score2 = self.score(x).data
-                            f1 = nn.CrossEntropyLoss(reduce=False)(score2, y).data
+                            f1 = nn.CrossEntropyLoss(reduce=False)(score2, y.long()).data
                             f1 = f1/f1.size(0)
                             for i in range(len(self.layers)):
                                 f1_kl = f1_kl + self.layers[i].post_nll_sudo - self.layers[i].prior_nll_sudo
                                 f1_prior = f1_prior + self.layers[i].prior_nll_sudo
                         else:
                             f1 = 0
-                        f2 = nn.CrossEntropyLoss(reduce=False)(score, y).data - self.opt.lambda_kl * (1.0 / 60000.0)* f2_kl.data
+                        f2 = nn.CrossEntropyLoss(reduce=False)(score, y.long()).data - self.opt.lambda_kl * (1.0 / 60000.0)* f2_kl.data
                         f1 = f1 - self.opt.lambda_kl * (1.0 / 60000.0)* f1_kl.data
                         f2 = f2/f2.size(0)
                         f1 = f1/f1.size(0)
@@ -243,7 +243,7 @@ class ARMMLP(nn.Module):
                     else:
                         self.forward_mode(True)
                         score = self.score(x)
-                        self.elbo = self.elbo_fun(nn.CrossEntropyLoss(reduce=False)(score, y).data)
+                        self.elbo = self.elbo_fun(nn.CrossEntropyLoss(reduce=False)(score, y.long()).data)
 
             else:
                 if self.training:
@@ -254,17 +254,17 @@ class ARMMLP(nn.Module):
                         if self.opt.ar is not True:
                             self.forward_mode(False)
                             score2 = self.score(x).data
-                            f1 = nn.CrossEntropyLoss(reduce=False)(score2, y).data
+                            f1 = nn.CrossEntropyLoss(reduce=False)(score2, y.long()).data
                         else:
                             f1 = 0
-                        f2 = nn.CrossEntropyLoss(reduce=False)(score, y).data
+                        f2 = nn.CrossEntropyLoss(reduce=False)(score, y.long()).data
 
                         self.update_phi_gradient(f1, f2)
                         self.train() if self.opt.gpus <= 1 else self.module.train()
                 else:
                     self.forward_mode(True)
                     score = self.score(x)
-                    self.elbo = -nn.CrossEntropyLoss(reduce=False)(score, y).data.mean()
+                    self.elbo = -nn.CrossEntropyLoss(reduce=False)(score, y.long()).data.mean()
             return score
 
     def update_phi_gradient(self, f1, f2, update_flag=None):

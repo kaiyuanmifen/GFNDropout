@@ -207,7 +207,7 @@ class MLP_GFN(nn.Module):
 		###during inference y are not used 
 		# print('X shape: {}'.format(x.size()))
 		x=x.reshape(x.shape[0],-1)
-		y=torch.nn.functional.one_hot(y, self.num_classes)#convert to one hot vector
+		y=torch.nn.functional.one_hot(y.long(), self.num_classes)#convert to one hot vector
 		batch_size,input_dim=x.shape[0],x.shape[1]
 		
 			
@@ -455,7 +455,7 @@ class MLP_GFN(nn.Module):
 		#loss calculation
 		#CEloss = F.nll_loss(logits, y)
  
-		CEloss = nn.CrossEntropyLoss(reduction='none')(logits, y)
+		CEloss = nn.CrossEntropyLoss(reduction='none')(logits, y.long())
 		LL=-CEloss
 		
 		print("self.beta",self.beta)

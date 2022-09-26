@@ -1,10 +1,10 @@
 #!/bin/bash
 #SBATCH --job-name=IECU_MLP_AL
 #SBATCH --gres=gpu:48gb:2
-#SBATCH --cpus-per-gpu=6
-#SBATCH --mem=48G
-#SBATCH --time=48:00:00         
-#SBATCH --partition=main
+#SBATCH --cpus-per-gpu=8
+#SBATCH --mem=65G
+#SBATCH --time=168:00:00         
+#SBATCH --partition=long
 #SBATCH --error=/home/mila/b/bonaventure.dossou/GFNDropout/al_slurmerror.txt
 #SBATCH --output=/home/mila/b/bonaventure.dossou/GFNDropout/al_slurmoutput.txt
 
