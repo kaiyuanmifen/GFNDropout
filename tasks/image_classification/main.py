@@ -25,6 +25,9 @@ from ece import ECELoss
 from random import randrange
 from sklearn.metrics import f1_score, recall_score, precision_score, balanced_accuracy_score
 
+import warnings
+warnings.filterwarnings("ignore")
+
 def setup_seed(seed):
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
@@ -67,8 +70,8 @@ def image_augmentation(inputs):
     return output_tensor
 
 
-def train(**kwargs):
-    global device, vis
+def train(active_learning=False, **kwargs):
+    global device
     if opt.seed is not None:
         setup_seed(opt.seed)
     if opt.valtestseed is not None:
@@ -80,12 +83,15 @@ def train(**kwargs):
     device==torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     best_val_loss=1e9
     #format
-    vis = Visualizer(opt.log_dir, opt.model+opt.model_name, current_time, opt.title_note)
+    # vis = Visualizer(opt.log_dir, opt.model+opt.model_name, current_time, opt.title_note)
     # log all configs
-    vis.log('config', config_str)
+    # vis.log('config', config_str)
 
     # load data set
-    train_loader, val_loader,test_loader, num_classes = getattr(dataset, opt.dataset)(opt.batch_size )
+    if active_learning == False:
+    	train_loader, val_loader,test_loader, num_classes = getattr(dataset, opt.dataset)(opt.batch_size )
+    else:
+    	train_loader, val_loader,test_loader, num_classes = kwargs['new_data']
     # load model
     print("***********************opt.model****")
     print(opt.model)
@@ -134,7 +140,7 @@ def train(**kwargs):
     # define loss function
     def criterion(output, target_var):
 
-        loss = nn.CrossEntropyLoss().to(device)(output, target_var)
+        loss = nn.CrossEntropyLoss().to(device)(output, target_var.long())
         if opt.GFN_dropout==False:
             reg_loss = model.regularization() if opt.gpus <= 1 else model.module.regularization()
             #total_loss = (loss + reg_loss.type_as(loss)).to(device)
@@ -199,9 +205,15 @@ def train(**kwargs):
     #format
     #TODO: neet to change
     if opt.GFN_dropout:
-        directory = '{}/{}_{}'.format(opt.checkpoints_dir, opt.model + opt.model_name+"_"+opt.mask+"_"+str(opt.BNN), current_time)
+    	try:
+    		directory = '{}/{}_{}_{}'.format(opt.checkpoints_dir, opt.model + opt.model_name+"_"+opt.mask+"_"+str(opt.BNN), current_time, str(opt.al_round))
+    	except:
+    		directory = '{}/{}_{}'.format(opt.checkpoints_dir, opt.model + opt.model_name+"_"+opt.mask+"_"+str(opt.BNN), current_time)
     else:
-        directory = '{}/{}_{}'.format(opt.checkpoints_dir, opt.model + opt.model_name, current_time)
+    	try:
+    		directory = '{}/{}_{}_{}'.format(opt.checkpoints_dir, opt.model + opt.model_name, current_time, str(opt.al_round))
+    	except:
+    		directory = '{}/{}_{}'.format(opt.checkpoints_dir, opt.model + opt.model_name, current_time)
     
     #directory = '{}/{}'.format(opt.checkpoints_dir, opt.model + opt.model_name)
     
@@ -304,8 +316,8 @@ def train(**kwargs):
                 
                 e_fl, e_l0 = model.get_exp_flops_l0() if opt.gpus <= 1 else model.module.get_exp_flops_l0()
      
-                vis.plot('stats_comp/exp_flops', e_fl, total_steps)
-                vis.plot('stats_comp/exp_l0', e_l0, total_steps)
+                # vis.plot('stats_comp/exp_flops', e_fl, total_steps)
+                # vis.plot('stats_comp/exp_l0', e_l0, total_steps)
 
             total_steps += 1
             #determine how many neurons
@@ -315,49 +327,51 @@ def train(**kwargs):
                     model.update_ema() if opt.gpus <= 1 else model.module.update_ema()
 
             if ii % opt.print_freq == opt.print_freq - 1:
-                vis.plot('train/loss', loss_meter.value()[0])
-                vis.plot('train/accuracy', accuracy_meter.value()[0])
+                # vis.plot('train/loss', loss_meter.value()[0])
+                # vis.plot('train/accuracy', accuracy_meter.value()[0])
 
                 if opt.GFN_dropout==True:
-                    vis.plot('train/GFNloss_unconditional', GFNloss_unconditional_meter.value()[0])
-                    vis.plot('train/LogZ_unconditional', LogZ_unconditional_meter.value()[0])
-                    vis.plot('train/LogPF_qz', LogPF_qz_meter.value()[0])
+                	pass
+                    # vis.plot('train/GFNloss_unconditional', GFNloss_unconditional_meter.value()[0])
+                    # vis.plot('train/LogZ_unconditional', LogZ_unconditional_meter.value()[0])
+                    # vis.plot('train/LogPF_qz', LogPF_qz_meter.value()[0])
                     
-                    vis.plot('train/GFNloss_conditional', GFNloss_conditional_meter.value()[0])
-                    vis.plot('train/LogZ_conditional', LogZ_conditional_meter.value()[0])
-                    vis.plot('train/LogPF_qzxy', LogPF_qzxy_meter.value()[0])
+                    # vis.plot('train/GFNloss_conditional', GFNloss_conditional_meter.value()[0])
+                    # vis.plot('train/LogZ_conditional', LogZ_conditional_meter.value()[0])
+                    # vis.plot('train/LogPF_qzxy', LogPF_qzxy_meter.value()[0])
 
-                    vis.plot('train/LogPF_BNN', LogPF_BNN_meter.value()[0])
+                    # vis.plot('train/LogPF_BNN', LogPF_BNN_meter.value()[0])
 
-                    vis.plot('train/actual_dropout_rate', actual_dropout_rate_meter.value()[0])
-
-
-                    vis.plot('train/COR_qz', COR_qz_meter.value()[0])
-
-                    vis.plot('train/COR_qzxy', COR_qzxy_meter.value()[0])
+                    # vis.plot('train/actual_dropout_rate', actual_dropout_rate_meter.value()[0])
 
 
-                    vis.plot('train/Log_pz', Log_pz_meter.value()[0])
+                    # vis.plot('train/COR_qz', COR_qz_meter.value()[0])
 
-                    vis.plot('train/Log_pzx', Log_pzx_meter.value()[0])
+                    # vis.plot('train/COR_qzxy', COR_qzxy_meter.value()[0])
+
+
+                    # vis.plot('train/Log_pz', Log_pz_meter.value()[0])
+
+                    # vis.plot('train/Log_pzx', Log_pzx_meter.value()[0])
 
 
                 if opt.verbose:
                     if opt.GFN_dropout:
-
-                        print("epoch:{epoch},lr:{lr},loss:{loss:.2f},train_acc:{train_acc:.2f} GFN_loss_conditional:{GFN_loss_conditional} GFN_loss_unconditional:{GFN_loss_unconditional} actual_dropout_rate:{actual_dropout_rate}"
-                                                  .format(epoch=epoch, loss=loss_meter.value()[0],
-                                                          train_acc=accuracy_meter.value()[0],
-                                                          lr=optimizer.param_groups[0]['lr'],
-                                                          GFN_loss_conditional=metric['GFN_loss_conditional'],
-                                                          GFN_loss_unconditional=metric['GFN_loss_unconditional'],
-                                                          actual_dropout_rate=metric['actual_dropout_rate'],))
+                    	if str(opt.dataset) != "iecu_al":                		
+	                        print("epoch:{epoch},lr:{lr},loss:{loss:.2f},train_acc:{train_acc:.2f} GFN_loss_conditional:{GFN_loss_conditional} GFN_loss_unconditional:{GFN_loss_unconditional} actual_dropout_rate:{actual_dropout_rate}"
+	                                                  .format(epoch=epoch, loss=loss_meter.value()[0],
+	                                                          train_acc=accuracy_meter.value()[0],
+	                                                          lr=optimizer.param_groups[0]['lr'],
+	                                                          GFN_loss_conditional=metric['GFN_loss_conditional'],
+	                                                          GFN_loss_unconditional=metric['GFN_loss_unconditional'],
+	                                                          actual_dropout_rate=metric['actual_dropout_rate'],))
 
                     else:
-                        print("epoch:{epoch},lr:{lr},loss:{loss:.2f},train_acc:{train_acc:.2f}"
-                          .format(epoch=epoch, loss=loss_meter.value()[0],
-                                  train_acc=accuracy_meter.value()[0],
-                                  lr=optimizer.param_groups[0]['lr']))
+                    	if str(opt.dataset) != "iecu_al":                		
+	                        print("epoch:{epoch},lr:{lr},loss:{loss:.2f},train_acc:{train_acc:.2f}"
+	                          .format(epoch=epoch, loss=loss_meter.value()[0],
+	                                  train_acc=accuracy_meter.value()[0],
+	                                  lr=optimizer.param_groups[0]['lr']))
 
         # save model
        
@@ -366,7 +380,7 @@ def train(**kwargs):
             torch.save(optimizer.state_dict(), directory + '/{}.optim'.format(epoch))
 
         # validate model
-        val_accuracy, val_loss, label_dict, input__dict, logits_dict, logits_dict_greedy, base_aic, up, ucpred, ac_prob, iu_prob, elbo, ece = val(model, val_loader, criterion, num_classes, opt)
+        val_accuracy, val_loss, label_dict, input__dict, logits_dict, logits_dict_greedy, base_aic, up, ucpred, ac_prob, iu_prob, elbo, ece, predicted_labels_dict = val(model, val_loader, criterion, num_classes, opt)
 
 
         if val_loss<best_val_loss:
@@ -382,8 +396,8 @@ def train(**kwargs):
         val_accuracy_history[total_steps] = {'accuracy': val_accuracy, 'aic': base_aic, 'up': up, 'ucpred': ucpred, 'ac_prob': ac_prob, 'iu_prob': iu_prob, 'elbo': elbo, 'ece': ece}
 
 
-        vis.plot('val/loss', val_loss)
-        vis.plot('val/accuracy', val_accuracy)
+        # vis.plot('val/loss', val_loss)
+        # vis.plot('val/accuracy', val_accuracy)
 
         # update lr
         if scheduler is not None:
@@ -403,26 +417,30 @@ def train(**kwargs):
 
         if opt.verbose:
             if opt.GFN_dropout==False:
-                print("epoch:{epoch},lr:{lr},loss:{loss:.2f},val_acc:{val_acc:.2f}, uncer:{base_aic_1:.2f}, {base_aic_2:.2f},{base_aic_3:.2f}, "
-                      "up:{up_1:.2f}, {up_2:.2f},{up_3:.2f}, ucpred:{ucpred_1:.2f}, {ucpred_2:.2f},{ucpred_3:.2f}, "
-                      "ac_prob:{ac_prob_1:.2f}, {ac_prob_2:.2f},{ac_prob_3:.2f}, iu_prob:{iu_prob_1:.2f}, {iu_prob_2:.2f},{iu_prob_3:.2f}, elbo:{elbo:.2f}, prune_rate:{pr:.2f}, ece:{ece:.4f}"
-                      .format(epoch=epoch, loss=loss_meter.value()[0], val_acc=val_accuracy, base_aic_1=base_aic[0], base_aic_2=base_aic[1],
-                              base_aic_3=base_aic[2], up_1=up[0],up_2=up[1],up_3=up[2],ucpred_1 = ucpred[0], ucpred_2 = ucpred[1], ucpred_3 = ucpred[2],
-                              ac_prob_1=ac_prob[0],ac_prob_2=ac_prob[1],ac_prob_3=ac_prob[2],iu_prob_1=iu_prob[0],iu_prob_2=iu_prob[1],iu_prob_3=iu_prob[2],elbo=elbo,
-                              lr=optimizer.param_groups[0]['lr'], pr=model.prune_rate() if opt.gpus <= 1 else model.module.prune_rate(), ece = ece[0]))
+            	if opt.is_iecu:
+
+             		if str(opt.dataset) != "iecu_al":
+	                	print("epoch:{epoch},lr:{lr},loss:{loss:.2f}, recall:{val_acc:.2f}, uncer:{base_aic_1:.2f}, {base_aic_2:.2f},{base_aic_3:.2f}, "
+	                      "up:{up_1:.2f}, {up_2:.2f},{up_3:.2f}, ucpred:{ucpred_1:.2f}, {ucpred_2:.2f},{ucpred_3:.2f}, "
+	                      "ac_prob:{ac_prob_1:.2f}, {ac_prob_2:.2f},{ac_prob_3:.2f}, iu_prob:{iu_prob_1:.2f}, {iu_prob_2:.2f},{iu_prob_3:.2f}, elbo:{elbo:.2f}, prune_rate:{pr:.2f}, ece:{ece:.4f}"
+	                      .format(epoch=epoch, loss=loss_meter.value()[0], val_acc=val_accuracy[1], base_aic_1=base_aic[0], base_aic_2=base_aic[1],
+	                              base_aic_3=base_aic[2], up_1=up[0],up_2=up[1],up_3=up[2],ucpred_1 = ucpred[0], ucpred_2 = ucpred[1], ucpred_3 = ucpred[2],
+	                              ac_prob_1=ac_prob[0],ac_prob_2=ac_prob[1],ac_prob_3=ac_prob[2],iu_prob_1=iu_prob[0],iu_prob_2=iu_prob[1],iu_prob_3=iu_prob[2],elbo=elbo,
+	                              lr=optimizer.param_groups[0]['lr'], pr=model.prune_rate() if opt.gpus <= 1 else model.module.prune_rate(), ece = ece[0]))
             else:
-                print("epoch:{epoch},lr:{lr},loss:{loss:.2f},val_acc:{val_acc:.2f}, uncer:{base_aic_1:.2f}, {base_aic_2:.2f},{base_aic_3:.2f}, "
-                      "up:{up_1:.2f}, {up_2:.2f},{up_3:.2f}, ucpred:{ucpred_1:.2f}, {ucpred_2:.2f},{ucpred_3:.2f}, "
-                      "ac_prob:{ac_prob_1:.2f}, {ac_prob_2:.2f},{ac_prob_3:.2f}, iu_prob:{iu_prob_1:.2f}, {iu_prob_2:.2f},{iu_prob_3:.2f}, elbo:{elbo:.2f}, ece:{ece:.4f}"
-                      .format(epoch=epoch, loss=loss_meter.value()[0], val_acc=val_accuracy, base_aic_1=base_aic[0], base_aic_2=base_aic[1],
-                              base_aic_3=base_aic[2], up_1=up[0],up_2=up[1],up_3=up[2],ucpred_1 = ucpred[0], ucpred_2 = ucpred[1], ucpred_3 = ucpred[2],
-                              ac_prob_1=ac_prob[0],ac_prob_2=ac_prob[1],ac_prob_3=ac_prob[2],iu_prob_1=iu_prob[0],iu_prob_2=iu_prob[1],iu_prob_3=iu_prob[2],elbo=elbo,
-                              lr=model.taskmodel_optimizer.param_groups[0]['lr'], ece = ece[0]))
+            	if str(opt.dataset) != "iecu_al":        		
+	                print("epoch:{epoch},lr:{lr},loss:{loss:.2f},recall:{val_acc:.2f}, uncer:{base_aic_1:.2f}, {base_aic_2:.2f},{base_aic_3:.2f}, "
+	                      "up:{up_1:.2f}, {up_2:.2f},{up_3:.2f}, ucpred:{ucpred_1:.2f}, {ucpred_2:.2f},{ucpred_3:.2f}, "
+	                      "ac_prob:{ac_prob_1:.2f}, {ac_prob_2:.2f},{ac_prob_3:.2f}, iu_prob:{iu_prob_1:.2f}, {iu_prob_2:.2f},{iu_prob_3:.2f}, elbo:{elbo:.2f}, ece:{ece:.4f}"
+	                      .format(epoch=epoch, loss=loss_meter.value()[0], val_acc=val_accuracy[1], base_aic_1=base_aic[0], base_aic_2=base_aic[1],
+	                              base_aic_3=base_aic[2], up_1=up[0],up_2=up[1],up_3=up[2],ucpred_1 = ucpred[0], ucpred_2 = ucpred[1], ucpred_3 = ucpred[2],
+	                              ac_prob_1=ac_prob[0],ac_prob_2=ac_prob[1],ac_prob_3=ac_prob[2],iu_prob_1=iu_prob[0],iu_prob_2=iu_prob[1],iu_prob_3=iu_prob[2],elbo=elbo,
+	                              lr=model.taskmodel_optimizer.param_groups[0]['lr'], ece = ece[0]))
                    
         #for (i, num) in enumerate(model.get_expected_activated_neurons() if opt.gpus <= 1
         #                          else model.module.get_expected_activated_neurons()):
         #    vis.plot("Training_layer/{}".format(i), num)
-        vis.plot('lr', optimizer.param_groups[0]['lr'])
+        # vis.plot('lr', optimizer.param_groups[0]['lr'])
 
 
        # histories['dp_history'] = dp_history
@@ -436,6 +454,8 @@ def train(**kwargs):
         #print('var', variance)
         with open(os.path.join(directory, 'histories_' + '.pkl'), 'wb') as f:
             cPickle.dump(histories, f)
+
+    return directory
 
 def two_sample_test_batch(logits):
     prob = torch.softmax(logits, 1)
@@ -461,6 +481,7 @@ def val(model, dataloader, criterion, num_classes, opt):
     logits_dict = OrderedDict()
     label_dict = OrderedDict()
     input__dict = OrderedDict()
+    predicted_labels_dict = OrderedDict()
     logits_dict_greedy = OrderedDict()
     accurate_pred = torch.zeros([0], dtype=torch.float64)
     testresult = torch.zeros([0], dtype=torch.float64)
@@ -470,12 +491,10 @@ def val(model, dataloader, criterion, num_classes, opt):
     score_tensors = torch.zeros([0], dtype=torch.float32)
 
     f1_preds, recall_preds, precision_preds, balanced_accs = [], [], [], []
-
     
     for ii, data in enumerate(dataloader):
         input_, label = data
         input_, label = input_.to(device), label.to(device)
-
 
         if opt.augment_test:
             
@@ -563,6 +582,7 @@ def val(model, dataloader, criterion, num_classes, opt):
         # F1-score
         pred_idx = prediction.detach().cpu().numpy()
         labels = label.detach().cpu().numpy()
+        predicted_labels_dict[ii] = pred_idx
         f1_preds.append(f1_score(labels, pred_idx, average='macro'))
         recall_preds.append(recall_score(labels, pred_idx, average='macro'))
         precision_preds.append(precision_score(labels, pred_idx, average='macro'))
@@ -629,20 +649,21 @@ def val(model, dataloader, criterion, num_classes, opt):
     #    else:
     #        vis.hist("sigmoid(phi)/{}".format(i), torch.sigmoid(opt.k * z_phi).cpu().detach().numpy())
     if opt.GFN_dropout==False:
-        vis.plot("prune_rate", model.prune_rate() if opt.gpus <= 1 else model.module.prune_rate())
+    	pass
+        # vis.plot("prune_rate", model.prune_rate() if opt.gpus <= 1 else model.module.prune_rate())
     #return accuracy_meter.value()[0], loss_meter.value()[0], label_dict, logits_dict
     if opt.is_iecu:
-        return (np.mean(f1_preds), np.mean(recall_preds), np.mean(precision_preds), np.mean(balanced_accs)), loss_meter_greedy.value()[0], label_dict, input__dict, logits_dict, logits_dict_greedy, base_aic, up, ucpred, ac_prob, iu_prob, np.mean(elbo_list)*100, ece
+        return (np.mean(f1_preds), np.mean(recall_preds), np.mean(precision_preds), np.mean(balanced_accs)), loss_meter_greedy.value()[0], label_dict, input__dict, logits_dict, logits_dict_greedy, base_aic, up, ucpred, ac_prob, iu_prob, np.mean(elbo_list)*100, ece, predicted_labels_dict
     else:
-        return accuracy_meter_greedy.value()[0], loss_meter_greedy.value()[0], label_dict, input__dict, logits_dict, logits_dict_greedy, base_aic, up, ucpred, ac_prob, iu_prob, np.mean(elbo_list)*100, ece
+        return accuracy_meter_greedy.value()[0], loss_meter_greedy.value()[0], label_dict, input__dict, logits_dict, logits_dict_greedy, base_aic, up, ucpred, ac_prob, iu_prob, np.mean(elbo_list)*100, ece, predicted_labels_dict
     #accuracy_meter.value()[0], loss_meter.value()[0]
 
 
 def test(**kwargs):
     opt.parse(kwargs)
-    global device, vis
+    global device
     #device = torch.device("cuda" if opt.use_gpu else "cpu")
-    vis = Visualizer(opt.log_dir, opt.model, current_time)
+    # vis = Visualizer(opt.log_dir, opt.model, current_time)
     # # load model
     # model = getattr(models, opt.model)(lambas=opt.lambas).to(device)
     # # load data set
@@ -659,7 +680,7 @@ def test(**kwargs):
         setup_seed_2(opt.valtestseed)
     # define loss function
     def criterion(output, target_var):
-        loss = nn.CrossEntropyLoss().to(device)(output, target_var)
+        loss = nn.CrossEntropyLoss().to(device)(output, target_var.long())
         if opt.GFN_dropout:
             total_loss =loss
         else:
@@ -668,7 +689,7 @@ def test(**kwargs):
 
     if len(opt.load_file) > 0:
         model.load_state_dict(torch.load(opt.load_file,map_location=device))
-        val_accuracy, val_loss, label_dict, input__dict, logits_dict, logits_dict_greedy, base_aic, up, ucpred, ac_prob, iu_prob, elbo, ece = val(model, test_loader, criterion, num_classes, opt)
+        val_accuracy, val_loss, label_dict, input__dict, logits_dict, logits_dict_greedy, base_aic, up, ucpred, ac_prob, iu_prob, elbo, ece, predicted_labels_dict = val(model, test_loader, criterion, num_classes, opt)
         
         if opt.GFN_dropout==False:
             if opt.is_iecu:
@@ -748,9 +769,9 @@ def val_rotate(model, dataloader, num_classes, opt):
 
 def test_rotate(**kwargs):
     opt.parse(kwargs)
-    global device, vis
+    global device
     #device = torch.device("cuda" if opt.use_gpu else "cpu")
-    vis = Visualizer(opt.log_dir, opt.model, current_time)
+    # vis = Visualizer(opt.log_dir, opt.model, current_time)
     # load model
     model = getattr(models, opt.model)(lambas=opt.lambas,opt=opt).to(device)
     # load data set
@@ -758,7 +779,7 @@ def test_rotate(**kwargs):
     #directory = dir + '{}/{}'.format(opt.checkpoints_dir, opt.model)
     # define loss function
     def criterion(output, target_var):
-        loss = nn.CrossEntropyLoss().to(device)(output, target_var)
+        loss = nn.CrossEntropyLoss().to(device)(output, target_var.long())
         total_loss = (loss + model.regularization() if opt.gpus <= 1 else model.module.regularization()).to(device)
         return total_loss
 
@@ -775,13 +796,84 @@ def test_rotate(**kwargs):
     with open(os.path.join(opt.load_file + 'test_result' + '.pkl'), 'wb') as f:
         cPickle.dump(test_result, f)
 
+def dempster_shafer(logits):
+	logits = torch.tensor(logits.mean(-1))
+	num_classes = logits.shape[1]
+	belief_mass = logits.exp().sum(1)
+	return num_classes / (belief_mass + num_classes)
 
+def uncertainty_logits(input_dict, dict_logits, top_k):
+	uncertainty_dict = []
+	for (_, input_), (_, logit) in zip(input_dict.items(), dict_logits.items()):
+		uncertainty_dict.append((input_, dempster_shafer(logit).item()))
+	return sorted(uncertainty_dict, key=lambda item: item[1], reverse=True)[:top_k]
+
+def augment_new_dataset(directory, **kwargs):
+    global device
+    opt.parse(kwargs)
+
+    # evaluate the model on the augmenting set    
+    def criterion(output, target_var):
+        loss = nn.CrossEntropyLoss().to(device)(output, target_var.long())
+        if opt.GFN_dropout:
+            total_loss =loss
+        else:
+            total_loss = (loss + model.regularization() if opt.gpus <= 1 else model.module.regularization()).to(device)
+        return total_loss
+    # vis = Visualizer(opt.log_dir, opt.model, current_time)
+    train_loader, val_loader, test_loader, num_classes = getattr(dataset, opt.dataset)(opt.batch_size)
+    model = getattr(models, opt.model)(lambas=opt.lambas, num_classes=num_classes, weight_decay=opt.weight_decay,
+                                       opt=opt).to(
+        device)
+    model.load_state_dict(torch.load(directory, map_location=device))
+    _, _, label_dict, input__dict, logits_dict, _, _, _, _, _, _, _, _, predicted_labels_dict = val(model, test_loader,
+                                                                                                    criterion,
+                                                                                                    num_classes,
+                                                                                                    opt)
+    uncertainties = uncertainty_logits(input__dict, logits_dict, 1000)
+
+    # append the new high-uncertain inputs to the the training dataset
+    print('Old size of dataset: {}'.format(len(train_loader)))
+    X = train_loader.dataset.getX()
+    Y = train_loader.dataset.getY()
+    print('Passed')
+    for batch, ((input_, uncertainty), label) in enumerate(zip(uncertainties, list(predicted_labels_dict.values()))):
+        if batch > 999:  # index starts by 0 so 0-999 = 1k elements 
+            break
+        else:
+            X = torch.cat((X, torch.tensor(input_).float()), 0)
+            Y = torch.cat((Y, torch.tensor(label).float()), 0)
+
+    train_loader.dataset.setX(X)
+    train_loader.dataset.setY(Y)
+
+    # TODO: Find a way to remove the top-k from the augmenting dataset
+    print('New size of dataset: {}'.format(len(train_loader)))
+    kwargs['new_data'] = (train_loader, val_loader, test_loader, num_classes)
+    return kwargs
+
+
+def active_learning(**kwargs):
+    global device
+    opt.parse(kwargs)
+
+    # finetune on the starting set
+    kwargs['al_round'] = 0
+    directory_model = train(**kwargs)
+    directory_model = directory_model + '/best.model'
+    for al_round in range(opt.al_rounds):
+        # augment data
+        kwargs = augment_new_dataset(directory_model, **kwargs)
+        kwargs['al_round'] = al_round + 1
+        # train on new dataset
+        print('Active Learning Round: {}'.format(al_round + 1))
+        directory_model = train(active_learning=True, **kwargs)
 
 def help():
     '''help'''
     print('''
     usage : python main.py <function> [--args=value]
-    <function> := train | test | help
+    <function> := train | test | active_learning | help
     example: 
             python {0} train --model=ARMLeNet5 --dataset=mnist --lambas='[.1,.1,.1,.1]' --optimizer=adam --lr=0.001
             python {0} test --model=ARMLeNet5 --dataset=mnist --lambas='[.1,.1,.1,.1]' --load_file="checkpoints/ARMLeNet5_2019-06-19 14:27:03/0.model"
@@ -795,4 +887,4 @@ def help():
 
 if __name__ == '__main__':
     import fire
-    fire.Fire({'train': train, 'test': test, 'help': help, 'test_rotate': test_rotate})
+    fire.Fire({'train': train, 'test': test, 'active_learning': active_learning, 'help': help, 'test_rotate': test_rotate})

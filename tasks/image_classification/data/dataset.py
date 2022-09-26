@@ -25,12 +25,61 @@ class Dataset(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.x)
 
+    def getX(self):
+        return self.x
+
+    def getY(self):
+        return self.y
+
+    def setX(self, x):
+        self.x = x
+
+    def setY(self, y):
+        self.y = y
+
     def __getitem__(self, index):
         return (
             self.x[index],
             self.y[index],
         )
 
+def iecu_al(augment=False, batch_size=256):
+    path_starting_set = "/home/mila/b/bonaventure.dossou/iecu_al_starting.csv"
+    path_augmenting_set = "/home/mila/b/bonaventure.dossou/iecu_al_augmentation.csv"
+
+    training_set = pd.read_csv(path_starting_set, delimiter=",")
+    testing_set = pd.read_csv(path_augmenting_set, delimiter=",")
+
+    training_targets = training_set["Death"].values
+    testing_targets = testing_set["Death"].values
+
+    training_set.drop(columns=['Death'], inplace=True)    
+    testing_set.drop(columns=['Death'], inplace=True)
+
+    training_features = training_set.values[:, :1369]
+    testing_features = testing_set.values[:, :1369]
+    
+    if opt.model == "MLP_GFN":
+        training_features = training_features.reshape(-1, 37, 37)
+        testing_features = testing_features.reshape(-1, 37, 37)
+
+    train_data, eval_data, train_data_labels, eval_data_labels = train_test_split(training_features, training_targets, test_size=0.4) #  90:10
+
+    print('Active Learning Training Set size: {}'.format(len(train_data_labels)))
+    print('Active Learning Validation Set size: {}'.format(len(eval_data_labels)))
+    print('Active Learning Augmenting Set size: {}'.format(len(testing_targets)))
+
+    iecu_train_dataset = Dataset(torch.tensor(train_data).float(), torch.tensor(train_data_labels))
+    iecu_valid_dataset = Dataset(torch.tensor(eval_data).float(), torch.tensor(eval_data_labels))
+    iecu_test_dataset = Dataset(torch.tensor(testing_features).float(), torch.tensor(testing_targets))
+
+    train_loader = torch.utils.data.DataLoader(iecu_train_dataset, batch_size=batch_size, shuffle=True)
+    validation_loader = torch.utils.data.DataLoader(iecu_valid_dataset, batch_size=batch_size, shuffle=False)
+    test_loader = torch.utils.data.DataLoader(iecu_test_dataset, batch_size=1, shuffle=False)
+
+    num_classes = 2
+
+    return train_loader, validation_loader, test_loader, num_classes
 
 def iecu(augment=False, batch_size=256):
     path = "/home/mila/b/bonaventure.dossou/iecu_data.csv"
