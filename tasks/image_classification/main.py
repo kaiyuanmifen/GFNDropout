@@ -837,18 +837,20 @@ def augment_new_dataset(directory, **kwargs):
                                                                                                     criterion,
                                                                                                     num_classes,
                                                                                                     opt)
-    uncertainties = uncertainty_logits(input__dict, logits_dict, 1000)
+    uncertainties = uncertainty_logits(input__dict, logits_dict, 2000)
     # append the new high-uncertain inputs to the the training dataset
     X = train_loader.dataset.getX()
     Y = train_loader.dataset.getY()
     # indices of elements to remove from augmenting set
     indices_to_delete = []
-    for batch, ((input_, uncertainty), key_label) in enumerate(zip(uncertainties, predicted_labels_dict.items())):
-        if batch > 1999:  # index starts by 0 so 0-1999 = 2k elements 
+    index_count = 0
+    for ((input_, uncertainty), key_label) in zip(uncertainties, predicted_labels_dict.items()):
+        if index_count > 1999:  # index starts by 0 so 0-1999 = 2k elements 
             break
         else:
             label_ = list(key_label)[1]
             indices_to_delete.append(list(key_label)[2])
+            index_count += 1
         X = torch.cat((X, torch.tensor(input_).float()), 0)
         Y = torch.cat((Y, torch.tensor(label_).float()), 0)
 
