@@ -844,12 +844,12 @@ def augment_new_dataset(directory, **kwargs):
     # indices of elements to remove from augmenting set
     indices_to_delete = []
     index_count = 0
-    for ((input_, uncertainty), key_label) in zip(uncertainties, predicted_labels_dict.items()):
+    for ((input_, uncertainty, index), key_label) in zip(uncertainties, predicted_labels_dict.items()):
         if index_count > 1999:  # index starts by 0 so 0-1999 = 2k elements 
             break
         else:
             label_ = list(key_label)[1]
-            indices_to_delete.append(list(key_label)[2])
+            indices_to_delete.append(index)
             index_count += 1
         X = torch.cat((X, torch.tensor(input_).float()), 0)
         Y = torch.cat((Y, torch.tensor(label_).float()), 0)
