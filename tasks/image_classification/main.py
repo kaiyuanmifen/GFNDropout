@@ -809,11 +809,6 @@ def uncertainty_logits(input_dict, dict_logits, top_k):
 		uncertainty_dict.append((input_, dempster_shafer(logit).item(), index))
 	return sorted(uncertainty_dict, key=lambda item: item[1], reverse=True)[:top_k]
 
-def th_delete(tensor, indices):
-    mask = torch.ones(tensor.numel(), dtype=torch.bool)
-    mask[indices] = False
-    return tensor[mask]
-
 def augment_new_dataset(directory, **kwargs):
     global device
     opt.parse(kwargs)
@@ -857,8 +852,9 @@ def augment_new_dataset(directory, **kwargs):
     # Remove the top-k from the augmenting dataset
     X_aug = test_loader.dataset.getX()
     Y_aug = test_loader.dataset.getY()
-    X_aug = th_delete(X_aug, indices_to_delete)
-    Y_aug = th_delete(Y_aug, indices_to_delete)
+    index_to_keep = [_ for _ in range(len(X_aug)) if _ not in indices_to_delete]
+    X_aug = X_aug[index_to_keep]
+    Y_aug = Y_aug[index_to_keep]
     test_loader.dataset.setX(X_aug)
     test_loader.dataset.setY(Y_aug)
 
