@@ -805,9 +805,14 @@ def dempster_shafer(logits):
 
 def uncertainty_logits(input_dict, dict_logits, top_k):
 	uncertainty_dict = []
-	for (_, input_), (_, logit) in zip(input_dict.items(), dict_logits.items()):
-		uncertainty_dict.append((input_, dempster_shafer(logit).item()))
+	for index, ((_, input_), (_, logit)) in enumerate(zip(input_dict.items(), dict_logits.items())):
+		uncertainty_dict.append((input_, dempster_shafer(logit).item(), index))
 	return sorted(uncertainty_dict, key=lambda item: item[1], reverse=True)[:top_k]
+
+def th_delete(tensor, indices):
+    mask = torch.ones(tensor.numel(), dtype=torch.bool)
+    mask[indices] = False
+    return tensor[mask]
 
 def augment_new_dataset(directory, **kwargs):
     global device
@@ -836,18 +841,28 @@ def augment_new_dataset(directory, **kwargs):
     # append the new high-uncertain inputs to the the training dataset
     X = train_loader.dataset.getX()
     Y = train_loader.dataset.getY()
+    # indices of elements to remove from augmenting set
+    indices_to_delete = []
     for batch, ((input_, uncertainty), key_label) in enumerate(zip(uncertainties, predicted_labels_dict.items())):
         if batch > 999:  # index starts by 0 so 0-999 = 1k elements 
             break
         else:
             label_ = list(key_label)[1]
+            indices_to_delete.append(list(key_label)[2])
         X = torch.cat((X, torch.tensor(input_).float()), 0)
         Y = torch.cat((Y, torch.tensor(label_).float()), 0)
+
+    # Remove the top-k from the augmenting dataset
+    X_aug = test_loader.dataset.getX()
+    Y_aug = test_loader.dataset.getY()
+    X_aug = th_delete(X_aug, indices_to_delete)
+    Y_aug = th_delete(Y_aug, indices_to_delete)
+    test_loader.dataset.setX(X_aug)
+    test_loader.dataset.setY(Y_aug)
 
     train_loader.dataset.setX(X)
     train_loader.dataset.setY(Y)
     
-    # TODO: Find a way to remove the top-k from the augmenting dataset
     print('New size of dataset: {}'.format(len(train_loader)))
     kwargs['new_data'] = (train_loader, val_loader, test_loader, num_classes)
     return kwargs
@@ -886,7 +901,18 @@ def active_learning(**kwargs):
     kwargs['al_round'] = 0
     directory_model = train(**kwargs)
     directory_model = directory_model + '/best.model'
+    dict_of_scores = {}
     for al_round in range(opt.al_rounds):
+        # test the model on the test dataset
+        model = getattr(models, opt.model)(lambas=opt.lambas, num_classes=num_classes, weight_decay=opt.weight_decay,
+                                           opt=opt).to(device)
+        model.load_state_dict(torch.load(directory_model, map_location=device))
+        metrics, _, _, _, logits_dict, _, _, _, _, _, _, _, _, _ = val(model, real_test_loader, criterion, num_classes,
+                                                                       opt)
+        logits_ = list(logits_dict.items())
+        dict_of_scores['round_{}'.format(al_round)] = (
+        metrics[0], metrics[1], metrics[2], metrics[3], dempster_shafer(logits_[0][1]).mean().item())
+
         # augment data
         kwargs = augment_new_dataset(directory_model, **kwargs)
         kwargs['al_round'] = al_round + 1
@@ -894,31 +920,41 @@ def active_learning(**kwargs):
         print('Active Learning Round: {}'.format(al_round + 1))
         directory_model = train(active_learning=True, **kwargs)
 
-    # testing the AL model
+    # testing the AL model of the last round
     directory_model = directory_model + '/best.model'
     opt.parse(kwargs)
 
     train_loader, val_loader, test_loader, num_classes = getattr(dataset, opt.dataset)(opt.batch_size)
-
     model = getattr(models, opt.model)(lambas=opt.lambas, num_classes=num_classes, weight_decay=opt.weight_decay,
                                        opt=opt).to(device)
     model.load_state_dict(torch.load(directory_model, map_location=device))
     metrics, _, _, _, logits_dict, _, _, _, _, _, _, _, _, _ = val(model, real_test_loader, criterion, num_classes, opt)
-
-    frame = pd.DataFrame()
-    frame['method'] = [str(opt.model_name)]
-    frame['al_f1_score'] = [metrics[0]]
-    frame['al_recall_score'] = [metrics[1]]
-    frame['al_precision_score'] = [metrics[2]]
-    frame['al_balAcc_score'] = [metrics[3]]
     logits_ = list(logits_dict.items())
-    frame['dempster_shafer_uncertainty'] = [dempster_shafer(logits_[0][1]).mean().item()]
+    dict_of_scores['round_{}'.format(opt.al_rounds)] = (
+    metrics[0], metrics[1], metrics[2], metrics[3], dempster_shafer(logits_[0][1]).mean().item())
+
+    # frame = pd.DataFrame()
+    # frame['method'] = [str(opt.model_name)]
+    # frame['al_f1_score'] = [metrics[0]]
+    # frame['al_recall_score'] = [metrics[1]]
+    # frame['al_precision_score'] = [metrics[2]]
+    # frame['al_balAcc_score'] = [metrics[3]]
+    # logits_ = list(logits_dict.items())
+    # frame['dempster_shafer_uncertainty'] = [dempster_shafer(logits_[0][1]).mean().item()]
     if opt.model_name != "MLP_GFN":
-    	frame.to_csv('/home/mila/b/bonaventure.dossou/GFNDropout/tasks/Scripts/{}.csv'.format(str(opt.model_name)),
-                 index=False)
+        with open('/home/mila/b/bonaventure.dossou/GFNDropout/tasks/Scripts/al_{}.json'.format(str(opt.model_name)),
+                  'w') as f:
+            json.dump(dict_of_scores, f, indent=4)
+        f.close()
+    # frame.to_csv('/home/mila/b/bonaventure.dossou/GFNDropout/tasks/Scripts/{}.csv'.format(),
+    #             index=False)
     else:
-    	frame.to_csv('/home/mila/b/bonaventure.dossou/GFNDropout/tasks/Scripts/{}_{}.csv'.format(str(opt.model_name), str(opt.mask)),
-                 index=False)
+        with open('/home/mila/b/bonaventure.dossou/GFNDropout/tasks/Scripts/al_{}_{}.json'.format(str(opt.model_name),
+                                                                                                  str(opt.mask)),
+                  'w') as f:
+            json.dump(dict_of_scores, f, indent=4)
+        f.close()
+    # frame.to_csv('/home/mila/b/bonaventure.dossou/GFNDropout/tasks/Scripts/{}_{}.csv'.format(str(opt.model_name), str(opt.mask)),index=False)
 
 def help():
     '''help'''
