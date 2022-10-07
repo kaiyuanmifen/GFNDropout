@@ -844,7 +844,7 @@ def augment_new_dataset(directory, **kwargs):
     # indices of elements to remove from augmenting set
     indices_to_delete = []
     for batch, ((input_, uncertainty), key_label) in enumerate(zip(uncertainties, predicted_labels_dict.items())):
-        if batch > 999:  # index starts by 0 so 0-999 = 1k elements 
+        if batch > 1999:  # index starts by 0 so 0-1999 = 2k elements 
             break
         else:
             label_ = list(key_label)[1]
@@ -903,11 +903,12 @@ def active_learning(**kwargs):
     directory_model = directory_model + '/best.model'
     dict_of_scores = {}
     for al_round in range(opt.al_rounds):
+
         # test the model on the test dataset
-        model = getattr(models, opt.model)(lambas=opt.lambas, num_classes=num_classes, weight_decay=opt.weight_decay,
+        model = getattr(models, opt.model)(lambas=opt.lambas, num_classes=2, weight_decay=opt.weight_decay,
                                            opt=opt).to(device)
         model.load_state_dict(torch.load(directory_model, map_location=device))
-        metrics, _, _, _, logits_dict, _, _, _, _, _, _, _, _, _ = val(model, real_test_loader, criterion, num_classes,
+        metrics, _, _, _, logits_dict, _, _, _, _, _, _, _, _, _ = val(model, real_test_loader, criterion, 2,
                                                                        opt)
         logits_ = list(logits_dict.items())
         dict_of_scores['round_{}'.format(al_round)] = (
@@ -916,19 +917,23 @@ def active_learning(**kwargs):
         # augment data
         kwargs = augment_new_dataset(directory_model, **kwargs)
         kwargs['al_round'] = al_round + 1
+        opt.parse(kwargs)
+
         # train on new dataset
         print('Active Learning Round: {}'.format(al_round + 1))
         directory_model = train(active_learning=True, **kwargs)
+        directory_model = directory_model + '/best.model'
+
 
     # testing the AL model of the last round
-    directory_model = directory_model + '/best.model'
+    # directory_model = directory_model + '/best.model'
     opt.parse(kwargs)
 
-    train_loader, val_loader, test_loader, num_classes = getattr(dataset, opt.dataset)(opt.batch_size)
-    model = getattr(models, opt.model)(lambas=opt.lambas, num_classes=num_classes, weight_decay=opt.weight_decay,
+    # train_loader, val_loader, test_loader, num_classes = getattr(dataset, opt.dataset)(opt.batch_size)
+    model = getattr(models, opt.model)(lambas=opt.lambas, num_classes=2, weight_decay=opt.weight_decay,
                                        opt=opt).to(device)
     model.load_state_dict(torch.load(directory_model, map_location=device))
-    metrics, _, _, _, logits_dict, _, _, _, _, _, _, _, _, _ = val(model, real_test_loader, criterion, num_classes, opt)
+    metrics, _, _, _, logits_dict, _, _, _, _, _, _, _, _, _ = val(model, real_test_loader, criterion, 2, opt)
     logits_ = list(logits_dict.items())
     dict_of_scores['round_{}'.format(opt.al_rounds)] = (
     metrics[0], metrics[1], metrics[2], metrics[3], dempster_shafer(logits_[0][1]).mean().item())

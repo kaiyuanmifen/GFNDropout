@@ -17,7 +17,7 @@ python -u ../image_classification/main.py active_learning \
 										--model=ARMMLP \
 										--GFN_dropout False \
 										--dataset=iecu_al \
-										--al_rounds=20\
+										--al_rounds=10\
 										--lambas='[.0,.0,.0,.0]' \
 										--optimizer=adam \
 										--lr=0.001 \
@@ -45,7 +45,7 @@ python -u ../image_classification/main.py active_learning \
 										--concretedp False \
 										--fixdistrdp False \
 										--ctype "Bernoulli" \
-										--al_rounds=20\
+										--al_rounds=10\
 										--dropout_distribution 'bernoulli' \
 										--model_name "_AL_IECU_ARMMLP_Contextual" \
 										--max_epoch 100 \
@@ -54,7 +54,7 @@ python -u ../image_classification/main.py active_learning \
 python -u ../image_classification/main.py active_learning \
 										--model=MLP_GFN \
 										--GFN_dropout True \
-										--al_rounds=20\
+										--al_rounds=10\
 										--dataset=iecu_al \
 										--lambas='[.0,.0,.0,.0]' \
 										--optimizer=adam \
@@ -82,7 +82,7 @@ python -u ../image_classification/main.py active_learning \
 										--optimizer=adam \
 										--lr=0.001 \
 										--is_iecu True \
-										--al_rounds=20\
+										--al_rounds=10\
 										--add_noisedata=False \
 										--dptype False \
 										--concretedp False \
@@ -104,7 +104,7 @@ python -u ../image_classification/main.py active_learning \
 										--optimizer=adam \
 										--lr=0.001 \
 										--add_noisedata=False \
-										--al_rounds=20\
+										--al_rounds=10\
 										--dptype False \
 										--is_iecu True \
 										--concretedp False \
@@ -123,7 +123,7 @@ python -u ../image_classification/main.py active_learning \
 										--model=MLP_GFN \
 										--GFN_dropout True \
 										--dataset=iecu_al \
-										--al_rounds=20\
+										--al_rounds=10\
 										--lambas='[.0,.0,.0,.0]' \
 										--optimizer=adam \
 										--lr=0.001 \
@@ -132,7 +132,7 @@ python -u ../image_classification/main.py active_learning \
 										--concretedp False \
 										--fixdistrdp False \
 										--ctype "Bernoulli" \
-										--al_rounds=1\
+										--al_rounds=10\
 										--is_iecu True \
 										--dropout_distribution 'bernoulli' \
 										--mask "bottomup" \
@@ -146,7 +146,7 @@ python -u ../image_classification/main.py active_learning \
 										--model=MLP_GFN \
 										--GFN_dropout True \
 										--dataset=iecu_al \
-										--al_rounds=20\
+										--al_rounds=10\
 										--lambas='[.0,.0,.0,.0]' \
 										--optimizer=adam \
 										--lr=0.001 \
