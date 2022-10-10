@@ -23,6 +23,8 @@ from six.moves import cPickle
 # import seaborn as sns; sns.set()
 from ece import ECELoss
 from random import randrange
+import pandas as pd
+import os
 
 def setup_seed(seed):
     torch.manual_seed(seed)
@@ -79,12 +81,18 @@ def train(**kwargs):
     device==torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     best_val_loss=1e9
     #format
-    vis = Visualizer(opt.log_dir, opt.model+opt.model_name, current_time, opt.title_note)
+    vis = Visualizer(opt.log_dir, opt.dataset+"_"+opt.model+"_"+str(opt.seed), current_time, opt.title_note)
     # log all configs
     vis.log('config', config_str)
 
     # load data set
-    train_loader, val_loader,test_loader, num_classes = getattr(dataset, opt.dataset)(opt.batch_size )
+    if opt.dataset in ["cifar10c","cifar100c"]:
+        train_loader, val_loader,test_loader, num_classes = getattr(dataset, opt.dataset)(opt.batch_size,opt.corruption_name,opt.corruption_severity)
+    elif opt.subset_size!=None:#specifically for the transfer learning experiment
+        print("opt.subset_size",opt.subset_size)
+        train_loader, val_loader,test_loader, num_classes = getattr(dataset, opt.dataset)(opt.batch_size,opt.subset_size)
+    else:
+        train_loader, val_loader,test_loader, num_classes = getattr(dataset, opt.dataset)(opt.batch_size )
     # load model
     print("***********************opt.model****")
     print(opt.model)
@@ -94,7 +102,7 @@ def train(**kwargs):
 
     model.train()
     pytorch_total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    print(model)
+    #print(model)
     print('************total params size: ', pytorch_total_params)
     
     #resume the model
@@ -198,9 +206,10 @@ def train(**kwargs):
     #format
     #TODO: neet to change
     if opt.GFN_dropout:
-        directory = '{}/{}_{}'.format(opt.checkpoints_dir, opt.model+opt.dataset + opt.model_name+"_"+opt.mask+"_"+str(opt.BNN)+"_"+str(opt.use_pretrained)+"_"+str(opt.Tune_last_layer_only), current_time)
+        directory = '{}/{}_{}'.format(opt.checkpoints_dir, opt.model+opt.dataset + opt.model_name+"_"+opt.mask+"_"+str(opt.BNN)+"_"+str(opt.use_pretrained)+"_"+str(opt.Tune_last_layer_only)+"_"+str(opt.y_noise)+"_"+str(opt.subset_size), opt.seed)
     else:
-        directory = '{}/{}_{}'.format(opt.checkpoints_dir, opt.model+opt.dataset + opt.model_name, current_time)
+        #directory = '{}/{}_{}'.format(opt.checkpoints_dir, opt.model+opt.dataset + opt.model_name+"_"+str(opt.subset_size), opt.seed)
+        directory = '{}/{}_{}'.format(opt.checkpoints_dir, opt.model+opt.dataset + opt.model_name+"_"+opt.mask+"_"+str(opt.BNN)+"_"+str(opt.use_pretrained)+"_"+str(opt.Tune_last_layer_only)+"_"+str(opt.y_noise)+"_"+str(opt.subset_size), opt.seed)
     
     #directory = '{}/{}'.format(opt.checkpoints_dir, opt.model + opt.model_name)
     
@@ -230,6 +239,10 @@ def train(**kwargs):
 
         for ii, (input_, target) in enumerate(train_loader):
             print("batch",ii)
+
+            # print("******xy",input_.shape,target.shape)
+            # print(target)
+            
             input_, target = input_.to(device), target.to(device)
      
             if opt.add_noisedata:
@@ -237,6 +250,17 @@ def train(**kwargs):
                 gaussian_noise = np.random.normal(size=input_.size()) * opt.noise_scalar
                 gaussian_noise = torch.from_numpy(gaussian_noise * noise_mask).type_as(input_).to(device)
                 input_ = input_ + gaussian_noise
+
+
+            if opt.y_noise:
+                
+                mask=torch.rand(target.shape).to(device)
+                Percentage=0.3#percentage of labels got a random label
+                mask=mask.le(Percentage)
+                RandomLabels=torch.randint(target.min(),target.max(),target.shape).to(device)
+                target[mask]=RandomLabels[mask]
+                
+
             optimizer.zero_grad()
             model.epoch = epoch
 
@@ -365,7 +389,7 @@ def train(**kwargs):
             torch.save(optimizer.state_dict(), directory + '/{}.optim'.format(epoch))
 
         # validate model
-        val_accuracy, val_loss, label_dict, input__dict, logits_dict, logits_dict_greedy, base_aic, up, ucpred, ac_prob, iu_prob, elbo, ece = val(model, val_loader, criterion, num_classes, opt)
+        val_accuracy, val_loss, label_dict, input__dict, logits_dict, logits_dict_greedy, base_aic, up, ucpred, ac_prob, iu_prob, elbo, ece ,allMasks= val(model, val_loader, criterion, num_classes, opt)
 
 
         if val_loss<best_val_loss:
@@ -468,7 +492,7 @@ def val(model, dataloader, criterion, num_classes, opt):
     label_tensors = torch.zeros([0], dtype=torch.int64)
     score_tensors = torch.zeros([0], dtype=torch.float32)
 
-    
+    allMasks=[]
     for ii, data in enumerate(dataloader):
         input_, label = data
         input_, label = input_.to(device), label.to(device)
@@ -517,9 +541,10 @@ def val(model, dataloader, criterion, num_classes, opt):
         # input_ = input_ + torch.from_numpy(np.random.normal(size=input_.size())).to(device)*opt.noise
         if opt.GFN_dropout==False:
             score = model(input_, label)
+
         if opt.GFN_dropout==True:
             score,actual_masks,masks_qz,masks_qzxy,LogZ_unconditional,LogPF_qz,LogR_qz,LogPB_qz,LogPF_BNN,LogZ_conditional,LogPF_qzxy,LogR_qzxy,LogPB_qzxy,Log_pzx,Log_pz  = model.GFN_forward(input_,label,mask=opt.mask)
-        
+
 
         ####
         label_tensors = torch.cat((label_tensors, label.cpu()), 0)
@@ -534,16 +559,31 @@ def val(model, dataloader, criterion, num_classes, opt):
         #sample
         opt.test_sample_mode = 'sample'
         opt.use_t_in_testing = False
+
+        batch_Masks=[]
         for iii in range(opt.sample_num):
             # important step !!!!!!
             if opt.GFN_dropout==True:
-                score = model(input_, label,opt.mask)
+                score,actual_masks = model(input_, label,opt.mask)
+
+                actual_masks=torch.cat(actual_masks,-1)#shape 
+
             
             else:
                 score = model(input_, label)
+                actual_masks=torch.zeros(score.shape[0],2).to(device)#placeholder
             
+            batch_Masks.append(actual_masks.unsqueeze(2))
+
+
             logits_ii[:, :, iii] = score.cpu().data.numpy()
             elbo_list.append(model.elbo.cpu().numpy())
+        
+        batch_Masks=torch.cat(batch_Masks,2)
+        if ii <=2:
+            #save masks of first few batchs for later analysis
+            allMasks.append(batch_Masks)
+
         logits_dict[ii] = logits_ii
         label_dict[ii] = label.cpu()
         input__dict[ii] = input_.cpu().numpy()
@@ -563,6 +603,7 @@ def val(model, dataloader, criterion, num_classes, opt):
         testresult = torch.cat([testresult, testresult_i], 0)
         noise_mask_conca = torch.cat([noise_mask_conca, torch.from_numpy(noise_mask[:,0,0,0]).type_as(logits_tsam)], 0)
 
+    allMasks=torch.cat(allMasks,2).cpu().detach().numpy()
     ####
     ece = ECELoss(n_bins = 10)(score_tensors, label_tensors)
     ####
@@ -618,7 +659,7 @@ def val(model, dataloader, criterion, num_classes, opt):
     #if opt.GFN_dropout==False:
      #   vis.plot("prune_rate", model.prune_rate() if opt.gpus <= 1 else model.module.prune_rate())
     #return accuracy_meter.value()[0], loss_meter.value()[0], label_dict, logits_dict
-    return accuracy_meter_greedy.value()[0], loss_meter_greedy.value()[0], label_dict, input__dict, logits_dict, logits_dict_greedy, base_aic, up, ucpred, ac_prob, iu_prob, np.mean(elbo_list)*100, ece
+    return accuracy_meter_greedy.value()[0], loss_meter_greedy.value()[0], label_dict, input__dict, logits_dict, logits_dict_greedy, base_aic, up, ucpred, ac_prob, iu_prob, np.mean(elbo_list)*100, ece,allMasks
     #accuracy_meter.value()[0], loss_meter.value()[0]
 
 
@@ -626,12 +667,16 @@ def test(**kwargs):
     opt.parse(kwargs)
     global device, vis
     #device = torch.device("cuda" if opt.use_gpu else "cpu")
-    vis = Visualizer(opt.log_dir, opt.model, current_time)
+    vis = Visualizer(opt.log_dir, opt.dataset+"_"+opt.model+"_"+str(opt.seed), current_time)
     # # load model
     # model = getattr(models, opt.model)(lambas=opt.lambas).to(device)
     # # load data set
     # train_loader, test_loader, num_classes = getattr(dataset, opt.dataset)(opt.batch_size)
-    train_loader,val_loader, test_loader, num_classes = getattr(dataset, opt.dataset)(opt.batch_size)
+
+    if opt.dataset in ["cifar10c","cifar100c"]:
+        train_loader, val_loader,test_loader, num_classes = getattr(dataset, opt.dataset)(opt.batch_size,opt.corruption_name,opt.corruption_severity)
+    else:
+        train_loader, val_loader,test_loader, num_classes = getattr(dataset, opt.dataset)(opt.batch_size)
     # load model
     print("***********************opt.model****")
     print(opt.model)
@@ -652,32 +697,63 @@ def test(**kwargs):
 
     if len(opt.load_file) > 0:
         model.load_state_dict(torch.load(opt.load_file,map_location=device))
-        val_accuracy, val_loss, label_dict, input__dict, logits_dict, logits_dict_greedy, base_aic, up, ucpred, ac_prob, iu_prob, elbo, ece = val(model, test_loader, criterion, num_classes, opt)
+    else:
+        print("****not loading any trained model***")#debugging purpose
+    
+
+    val_accuracy, val_loss, label_dict, input__dict, logits_dict, logits_dict_greedy, base_aic, up, ucpred, ac_prob, iu_prob, elbo, ece,allMasks = val(model, test_loader, criterion, num_classes, opt)
         
-        if opt.GFN_dropout==False:
-            print("augment_test:{augment_test} loss:{loss:.2f},val_acc:{val_acc:.2f}, uncer:{base_aic_1:.2f}, {base_aic_2:.2f},{base_aic_3:.2f}, up:{up_1:.2f}, {up_2:.2f},{up_3:.2f}, prune_rate:{pr:.2f}, elbo:{elbo:.2f}, ece:{ece:.4f}"
-                  .format(augment_test=opt.augment_test,loss=val_loss, val_acc=val_accuracy, base_aic_1=base_aic[0], base_aic_2=base_aic[1],
-                              base_aic_3=base_aic[2], up_1=up[0],up_2=up[1],up_3=up[2], elbo=elbo , pr=model.prune_rate()if opt.gpus <= 1 else model.module.prune_rate(), ece = ece[0]))
-        else:            
-            print("augment_test:{augment_test} loss:{loss:.2f},val_acc:{val_acc:.2f}, uncer:{base_aic_1:.2f}, {base_aic_2:.2f},{base_aic_3:.2f}, up:{up_1:.2f}, {up_2:.2f},{up_3:.2f}, elbo:{elbo:.2f}, ece:{ece:.4f}"
-                  .format(augment_test=opt.augment_test,loss=val_loss, val_acc=val_accuracy, base_aic_1=base_aic[0], base_aic_2=base_aic[1],
-                              base_aic_3=base_aic[2], up_1=up[0],up_2=up[1],up_3=up[2], elbo=elbo , ece = ece[0]))
+    if opt.GFN_dropout==False:
+        print("augment_test:{augment_test} loss:{loss:.2f},val_acc:{val_acc:.2f}, uncer:{base_aic_1:.2f}, {base_aic_2:.2f},{base_aic_3:.2f}, up:{up_1:.2f}, {up_2:.2f},{up_3:.2f}, prune_rate:{pr:.2f}, elbo:{elbo:.2f}, ece:{ece:.4f}"
+              .format(augment_test=opt.augment_test,loss=val_loss, val_acc=val_accuracy, base_aic_1=base_aic[0], base_aic_2=base_aic[1],
+                          base_aic_3=base_aic[2], up_1=up[0],up_2=up[1],up_3=up[2], elbo=elbo , pr=model.prune_rate()if opt.gpus <= 1 else model.module.prune_rate(), ece = ece[0]))
+    else:            
+        print("augment_test:{augment_test} loss:{loss:.2f},val_acc:{val_acc:.2f}, uncer:{base_aic_1:.2f}, {base_aic_2:.2f},{base_aic_3:.2f}, up:{up_1:.2f}, {up_2:.2f},{up_3:.2f}, elbo:{elbo:.2f}, ece:{ece:.4f}"
+              .format(augment_test=opt.augment_test,loss=val_loss, val_acc=val_accuracy, base_aic_1=base_aic[0], base_aic_2=base_aic[1],
+                          base_aic_3=base_aic[2], up_1=up[0],up_2=up[1],up_3=up[2], elbo=elbo , ece = ece[0]))
 
 
         # print(model.get_activated_neurons())
-    test_result = {'label': label_dict, 'logits': [logits_dict, logits_dict_greedy], 'input': input__dict}
-    with open(os.path.join(opt.load_file + 'test_result' + '.pkl'), 'wb') as f:
-        cPickle.dump(test_result, f)
+    # test_result = {'label': label_dict, 'logits': [logits_dict, logits_dict_greedy], 'input': input__dict}
+    # with open(os.path.join(opt.load_file + 'test_result' + '.pkl'), 'wb') as f:
+    #     cPickle.dump(test_result, f)
 
     #save results as csv
     import csv
-    results_tosave=[opt.load_file,opt.mask,opt.BNN,opt.augment_test,val_loss.item(),val_accuracy, base_aic[0].item(),
+    #save as csv for plot using different platforms
+    results_tosave=[opt.load_file,opt.dataset,
+                    opt.corruption_name,opt.corruption_severity,
+                    opt.mask,opt.BNN,opt.use_pretrained,
+                    opt.Tune_last_layer_only,opt.augment_test,opt.seed,
+                    val_loss.item(),val_accuracy, base_aic[0].item(),
                      base_aic[1].item(),
                     base_aic[2].item(), up[0].item(),
-                    up[1].item(),up[2].item(), elbo, ece[0].item()]    
-    with open(r'testresult.csv', 'a') as f:
+                    up[1].item(),up[2].item(), elbo, ece[0].item()]
+
+
+    if not os.path.exists("../results/"):
+        os.makedirs("../results/") 
+
+    if not os.path.exists("../results/masks/"):
+        os.makedirs("../results/masks/")       
+    
+    with open("../results/"+opt.dataset+'_testresult.csv', 'a') as f:
         writer = csv.writer(f)
         writer.writerow(results_tosave)
+
+    ####save the mask for distribution analysis
+
+    MaskDistribution=[]
+    for repeat in range(allMasks.shape[2]):
+        Vec=allMasks[:,:,repeat]
+
+        Vec=pd.DataFrame(Vec)
+        Vec["repeat"]=repeat
+        MaskDistribution.append(Vec)
+
+    MaskDistribution=pd.concat(MaskDistribution)
+    FileName=opt.dataset+"_"+opt.corruption_name+"_"+str(opt.corruption_severity)+"_"+opt.mask+"_"+str(opt.BNN)+"_"+str(opt.use_pretrained)+"_"+str(opt.Tune_last_layer_only)+"_"+str(opt.augment_test)+"_"+str(opt.seed)
+    MaskDistribution.to_csv("../results/masks/"+FileName+'_mask.csv')
 
 
 def image_rotate(inputs,angle):
@@ -728,7 +804,7 @@ def test_rotate(**kwargs):
     opt.parse(kwargs)
     global device, vis
     #device = torch.device("cuda" if opt.use_gpu else "cpu")
-    vis = Visualizer(opt.log_dir, opt.model, current_time)
+    vis = Visualizer(opt.log_dir, opt.dataset+"_"+opt.model+"_"+str(opt.seed), current_time)
     # load model
     model = getattr(models, opt.model)(lambas=opt.lambas,opt=opt).to(device)
     # load data set

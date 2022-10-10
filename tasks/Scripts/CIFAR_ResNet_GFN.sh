@@ -2,7 +2,7 @@
 #SBATCH --job-name=GFN
 #SBATCH --gres=gpu:1               # Number of GPUs (per node)
 #SBATCH --mem=65G               # memory (per node)
-#SBATCH --time=0-6:50            # time (DD-HH:MM)
+#SBATCH --time=0-7:50            # time (DD-HH:MM)
 
 
 ###########cluster information above this line
@@ -16,26 +16,33 @@ module load cuda/11.1
 conda activate GFlownets
 
 
+data=$1
+
+method=$2
+
+y_noise=$3
+
+seed=$4
 
 
- CUDA_LAUNCH_BLOCKING=1 python ../image_classification/main.py train \
+python ../image_classification/main.py train \
 										--model=ResNet_GFN \
 										--GFN_dropout True \
-										--dataset=cifar10 \
+										--dataset=${data} \
 										--lambas=.001 \
 										--optimizer=momentum \
-										--lr=0.1 \
-										--schedule_milestone="[60, 120]" \
+										--lr=0.05 \
+										--schedule_milestone="[25, 40]" \
 										--add_noisedata=False \
 										--concretedp False \
 										--dptype False \
 										--fixdistrdp False \
 										--ctype "Bernoulli" \
 										--dropout_distribution 'bernoulli' \
-										--model_name "_CIFAR_ResNet_GFN" \
-										--mask "topdown" \
+										--model_name "_ResNet_GFN" \
+										--mask ${method} \
 										--BNN False \
 										--max_epoch 200 \
-										--mlp_dr 0.9 \
-										#--start_model "../../checkpoints/ARMWideResNet_GFN_CIFAR_ARMWideResNet_GFN_both_NN_base" \
+										--seed ${seed} \
+										--y_noise ${y_noise} \
 										

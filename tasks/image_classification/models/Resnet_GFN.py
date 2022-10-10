@@ -131,11 +131,15 @@ class ResNet_GFN(nn.Module):
 		else:
 			taskmodel_param_list = [{'params': self.resnet.parameters(), 'lr': lr}]
 
-		self.taskmodel_optimizer = optim.Adam(taskmodel_param_list)
+		#self.taskmodel_optimizer = optim.Adam(taskmodel_param_list)
+		
+		self.taskmodel_optimizer = torch.optim.SGD(
+		taskmodel_param_list, momentum=0.9, weight_decay=5e-4
+		)
+
 		self.taskmodel_scheduler = torch.optim.lr_scheduler.MultiStepLR(self.taskmodel_optimizer,
-		 milestones=self.opt.schedule_milestone,gamma=0.2)
-
-
+		 milestones=self.opt.schedule_milestone,gamma=0.1)
+		
 		self.to(self.device)
 	  
 
@@ -171,8 +175,8 @@ class ResNet_GFN(nn.Module):
 				logits_,actual_masks,masks_qz,masks_qzxy,LogZ_unconditional,LogPF_qz,LogR_qz,LogPB_qz,LogPF_BNN,LogZ_conditional,LogPF_qzxy,LogR_qzxy,LogPB_qzxy,Log_pzx,Log_pz =self.GFN_forward(x,y,mask)
 				logits.append(logits_.unsqueeze(2))
 			logits=torch.logsumexp(torch.cat(logits,2),2) 
-			
-		return logits
+		
+		return logits,actual_masks
 
 
  
@@ -181,7 +185,7 @@ class ResNet_GFN(nn.Module):
 	def GFN_forward(self, x,y,mask="none"):
 		###during inference y are not used 
 
-		
+	
 		y=torch.nn.functional.one_hot(y, self.num_classes).float()#convert to one hot vector
 		batch_size,input_dim=x.shape[0],x.shape[1]
 		
@@ -413,7 +417,6 @@ class ResNet_GFN(nn.Module):
 		x=self.resnet.fc(x) 
 		pred=x
 		#pred = F.log_softmax(x, dim=1)   
-
 
  
 		return pred,actual_masks,masks_qz,masks_conditional,LogZ_unconditional,LogPF_qz,LogR_qz,LogPB_qz,LogPF_BNN,LogZ_conditional,LogPF_qzxy,LogR_qzxy,LogPB_qzxy,Log_pzx,Log_pz

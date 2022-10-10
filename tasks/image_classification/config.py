@@ -63,8 +63,12 @@ class DefaultConfig:
     beta=1.0
     use_pretrained=False #whether to use pretrained model
     Tune_last_layer_only=False
+    corruption_name="none"
+    corruption_severity=0
+    y_noise=False
+    subset_size=None
 
-    seed = None
+    seed = 0
     use_gpu = False
     load_file = ''
     batch_size =128 #default 128

@@ -20,10 +20,18 @@ conda activate GFlownets
 #python Pretrain_MNIST.py --name "MNIST_Suprise"
 
 
+data=$1
+
+method=$2
+
+seed=$3
+
+
+
 python -u ../image_classification/main.py train \
 										--model=MLP_GFN \
 										--GFN_dropout True \
-										--dataset=mnist \
+										--dataset=${data} \
 										--lambas='[.0,.0,.0,.0]' \
 										--optimizer=adam \
 										--lr=0.001 \
@@ -33,12 +41,13 @@ python -u ../image_classification/main.py train \
 										--fixdistrdp False \
 										--ctype "Bernoulli" \
 										--dropout_distribution 'bernoulli' \
-										--mask "none" \
+										--mask ${method} \
 										--BNN False \
-										--model_name "_MNIST_MLP_GFN" \
-										--beta 1 \
+										--model_name "_MLP_GFN" \
+										--beta 0.001 \
 										--max_epoch 200 \
-										--mlp_dr 0.9 \
-										#--start_model "../../checkpoints/MLP_GFN_MNIST_MLP_GFN_both_NN_base" \
+										--seed ${seed} \
 										
+
+
 

@@ -162,6 +162,13 @@ def parse_args():
 
 
 if __name__ == '__main__':
+    ###change wd to where the python file is
+    import os
+
+    abspath = os.path.abspath(__file__)
+    dname = os.path.dirname(abspath)
+    os.chdir(dname)
+
     HP = Cfgs()
 
     args = parse_args()

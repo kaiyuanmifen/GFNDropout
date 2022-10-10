@@ -16,13 +16,16 @@ conda activate GFlownets
 
 
 
-###pretraining
-#python Pretrain_MNIST.py --name "MNIST_Suprise"
+data=$1
+
+method=$2
+
+seed=$3
 
 python -u ../image_classification/main.py train \
 										--model=ARMMLP \
 										--GFFN_dropout False \
-										--dataset=mnist \
+										--dataset=${data} \
 										--lambas='[.0,.0,.0,.0]' \
 										--optimizer=adam \
 										--lr=0.001 \
@@ -32,15 +35,7 @@ python -u ../image_classification/main.py train \
 										--fixdistrdp False \
 										--ctype "Bernoulli" \
 										--dropout_distribution 'bernoulli' \
-										--model_name "_MNIST_ARMMLP_Contextual" \
+										--model_name "_MNIST_ARMMLP_${method}" \
 										--max_epoch 200 \
+										--seed ${seed} \
 
-
-# python ../image_classification/main.py train \
-# 										--model=ARMMLP \
-# 										--dataset=mnist \
-# 										--lambas='[.0,.0,.0,.0]' \
-# 										--optimizer=adam \
-# 										--lr=0.001 \
-# 										--add_noisedata=False \
-# 										--model_name "_MNIST_ARMMLP_Contextual"

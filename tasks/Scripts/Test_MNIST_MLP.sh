@@ -117,7 +117,6 @@ python ../image_classification/main.py test \
 python -u ../image_classification/main.py test \
 										--model=MLP_GFN \
 										--GFN_dropout True \
-										--dropout_rate 0.2 \
 										--dataset=mnist \
 										--lambas='[.0,.0,.0,.0]' \
 										--optimizer=adam \
@@ -141,7 +140,6 @@ python -u ../image_classification/main.py test \
 python -u ../image_classification/main.py test \
 										--model=MLP_GFN \
 										--GFN_dropout True \
-										--dropout_rate 0.2 \
 										--dataset=mnist \
 										--lambas='[.0,.0,.0,.0]' \
 										--optimizer=adam \
@@ -167,7 +165,6 @@ python -u ../image_classification/main.py test \
 python -u ../image_classification/main.py test \
 										--model=MLP_GFN \
 										--GFN_dropout True \
-										--dropout_rate 0.2 \
 										--dataset=mnist \
 										--lambas='[.0,.0,.0,.0]' \
 										--optimizer=adam \
@@ -191,7 +188,6 @@ python -u ../image_classification/main.py test \
 python -u ../image_classification/main.py test \
 										--model=MLP_GFN \
 										--GFN_dropout True \
-										--dropout_rate 0.2 \
 										--dataset=mnist \
 										--lambas='[.0,.0,.0,.0]' \
 										--optimizer=adam \
@@ -220,7 +216,6 @@ python -u ../image_classification/main.py test \
 python -u ../image_classification/main.py test \
 										--model=MLP_GFN \
 										--GFN_dropout True \
-										--dropout_rate 0.2 \
 										--dataset=mnist \
 										--lambas='[.0,.0,.0,.0]' \
 										--optimizer=adam \
@@ -244,7 +239,6 @@ python -u ../image_classification/main.py test \
 python -u ../image_classification/main.py test \
 										--model=MLP_GFN \
 										--GFN_dropout True \
-										--dropout_rate 0.2 \
 										--dataset=mnist \
 										--lambas='[.0,.0,.0,.0]' \
 										--optimizer=adam \
@@ -269,7 +263,6 @@ python -u ../image_classification/main.py test \
 python -u ../image_classification/main.py test \
 										--model=MLP_GFN \
 										--GFN_dropout True \
-										--dropout_rate 0.2 \
 										--dataset=mnist \
 										--lambas='[.0,.0,.0,.0]' \
 										--optimizer=adam \
@@ -293,7 +286,6 @@ python -u ../image_classification/main.py test \
 python -u ../image_classification/main.py test \
 										--model=MLP_GFN \
 										--GFN_dropout True \
-										--dropout_rate 0.2 \
 										--dataset=mnist \
 										--lambas='[.0,.0,.0,.0]' \
 										--optimizer=adam \
@@ -317,7 +309,6 @@ python -u ../image_classification/main.py test \
 python -u ../image_classification/main.py test \
 										--model=MLP_GFN \
 										--GFN_dropout True \
-										--dropout_rate 0.2 \
 										--dataset=mnist \
 										--lambas='[.0,.0,.0,.0]' \
 										--optimizer=adam \
@@ -341,7 +332,6 @@ python -u ../image_classification/main.py test \
 python -u ../image_classification/main.py test \
 										--model=MLP_GFN \
 										--GFN_dropout True \
-										--dropout_rate 0.2 \
 										--dataset=mnist \
 										--lambas='[.0,.0,.0,.0]' \
 										--optimizer=adam \

@@ -24,8 +24,8 @@ conda activate GFlownets
 										--dataset=cifar100 \
 										--lambas=.001 \
 										--optimizer=momentum \
-										--lr=0.1 \
-										--schedule_milestone="[60, 120]" \
+										--lr=0.05 \
+										--schedule_milestone="[25, 40]" \
 										--add_noisedata=False \
 										--concretedp False \
 										--dptype False \
@@ -36,6 +36,5 @@ conda activate GFlownets
 										--mask "upNdown" \
 										--BNN False \
 										--max_epoch 200 \
-										--mlp_dr 0.9 \
 										--Tune_last_layer_only True \
 										--use_pretrained True \	

@@ -10,11 +10,11 @@ class PATH:
     def __init__(self):
 
         # vqav2 dataset root path
-        self.dir = '/work/06792/kt22354/maverick2/VQA'
-        self.DATASET_PATH = self.dir + '/datasets/vqa/'
+        self.dir = '/home/mila/d/dianbo.liu/scratch/GFlownets/data/vqadatasets'
+        self.DATASET_PATH = self.dir + '/vqa/'
 
         # bottom up features root path
-        self.FEATURE_PATH = self.dir + '/datasets/coco_extract/'
+        self.FEATURE_PATH = self.dir + '/coco_extract/'
 
         self.init_path()
 

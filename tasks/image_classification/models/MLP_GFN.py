@@ -13,7 +13,7 @@ import random
 epsilon = 1e-7
 device=torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 class MLP_GFN(nn.Module):
-	def __init__(self, input_dim=784, num_classes=10, N=60000, layer_dims=(256,256,256),
+	def __init__(self, input_dim=784, num_classes=10, N=60000, layer_dims=(1024,1024,1024),
 				weight_decay=5e-4, lambas=(.1, .1, .1),
 				 activation=nn.LeakyReLU,opt=None):
 		super(MLP_GFN, self).__init__()

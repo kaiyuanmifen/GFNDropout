@@ -14,15 +14,20 @@ module load cuda/11.1
 #conda activate GNN
 conda activate GFlownets
 
+data=$1
+
+method=$2
+
+y_noise=$3
+
+seed=$4
 
 
-###pretraining
-#python Pretrain_MNIST.py --name "MNIST_Suprise"
 
 python ../image_classification/main.py train \
 										--model=ResNet_Con \
 										--GFN_dropout False \
-										--dataset=cifar10 \
+										--dataset=${data} \
 										--lambas=.001 \
 										--optimizer=momentum \
 										--lr=0.1 \
@@ -33,6 +38,8 @@ python ../image_classification/main.py train \
 										--fixdistrdp False \
 										--ctype "Bernoulli" \
 										--dropout_distribution 'bernoulli' \
-										--model_name "_CIFAR_ARMWideResNet_Concrete" \
+										--model_name "_ARMWideResNet_${method}" \
 										--max_epoch 200 \
+										--seed ${seed} \
+										--y_noise ${y_noise} \
 
