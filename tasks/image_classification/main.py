@@ -132,6 +132,7 @@ def train(active_learning=False, **kwargs):
     #dp_history = histories.get('dp_history', {})
     target_history = histories.get('target_history', {})
     input__history = histories.get('input__hisotry',{})
+    train_history = histories.get('training_history', {})
     val_accuracy_history = histories.get('val_accuracy_hisotry', {})
     first_order = histories.get('first_order_history', np.zeros(1))
     second_order = histories.get('second_order_history', np.zeros(1))
@@ -379,8 +380,8 @@ def train(active_learning=False, **kwargs):
 	                                  train_acc=accuracy_meter.value()[0],
 	                                  lr=optimizer.param_groups[0]['lr']))
 
+
         # save model
-       
         if epoch % 10 == 0 or epoch == opt.max_epoch - 1:
             torch.save(model.state_dict(), directory + '/{}.model'.format(epoch))
             torch.save(optimizer.state_dict(), directory + '/{}.optim'.format(epoch))
@@ -401,6 +402,7 @@ def train(active_learning=False, **kwargs):
         #         #input__history[total_steps] = input_.cpu().numpy()
         val_accuracy_history[total_steps] = {'accuracy': val_accuracy, 'aic': base_aic, 'up': up, 'ucpred': ucpred, 'ac_prob': ac_prob, 'iu_prob': iu_prob, 'elbo': elbo, 'ece': ece}
 
+        train_history[total_steps] = {'loss': loss_meter.value()[0], 'accuracy': accuracy_meter.value()[0]}
 
         # vis.plot('val/loss', val_loss)
         # vis.plot('val/accuracy', val_accuracy)
@@ -450,6 +452,7 @@ def train(active_learning=False, **kwargs):
 
 
        # histories['dp_history'] = dp_history
+        histories['training_history'] = train_history
         histories['target_history'] = target_history
         histories['input__history'] = input__history
         histories['val_accuracy_history'] = val_accuracy_history
