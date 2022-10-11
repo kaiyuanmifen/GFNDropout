@@ -17,6 +17,7 @@ import torchvision
 import torch.nn.functional as F
 import random
 import scipy.stats as sts
+import json
 #updating
 import pandas as pd
 from six.moves import cPickle
@@ -92,7 +93,11 @@ def train(active_learning=False, **kwargs):
     if active_learning == False:
     	train_loader, val_loader,test_loader, num_classes = getattr(dataset, opt.dataset)(opt.batch_size )
     else:
-    	train_loader, val_loader,test_loader, num_classes = kwargs['new_data']
+    	train_loader, val_loader, test_loader, num_classes = opt.new_data
+    	print('Active Learning New Training Set size: {}'.format(len(train_loader)))
+    	print('Active Learning New Validation Set size: {}'.format(len(val_loader)))
+    	print('Active Learning New Augmenting Set size: {}'.format(len(test_loader)))
+
     # load model
     print("***********************opt.model****")
     print(opt.model)
@@ -823,7 +828,10 @@ def augment_new_dataset(directory, **kwargs):
         return total_loss
 
     # vis = Visualizer(opt.log_dir, opt.model, current_time)
-    train_loader, val_loader, test_loader, num_classes = getattr(dataset, opt.dataset)(opt.batch_size)
+    try:
+    	train_loader, val_loader, test_loader, num_classes = opt.new_data
+    except:
+    	train_loader, val_loader, test_loader, num_classes = getattr(dataset, opt.dataset)(opt.batch_size)
     model = getattr(models, opt.model)(lambas=opt.lambas, num_classes=num_classes, weight_decay=opt.weight_decay,
                                        opt=opt).to(
         device)
@@ -836,18 +844,21 @@ def augment_new_dataset(directory, **kwargs):
     # append the new high-uncertain inputs to the the training dataset
     X = train_loader.dataset.getX()
     Y = train_loader.dataset.getY()
+    print('Old size of dataset: {}'.format(len(train_loader)))
+
     # indices of elements to remove from augmenting set
     indices_to_delete = []
     index_count = 0
-    for ((input_, uncertainty, index), key_label) in zip(uncertainties, predicted_labels_dict.items()):
+    for ((input_, uncertainty, index), key_label) in zip(uncertainties, label_dict.items()):
         if index_count > 1999:  # index starts by 0 so 0-1999 = 2k elements 
             break
         else:
             label_ = list(key_label)[1]
             indices_to_delete.append(index)
             index_count += 1
-        X = torch.cat((X, torch.tensor(input_).float()), 0)
-        Y = torch.cat((Y, torch.tensor(label_).float()), 0)
+
+            X = torch.cat((X, torch.tensor(input_).float()), 0)
+            Y = torch.cat((Y, torch.tensor(label_).float()), 0)
 
     # Remove the top-k from the augmenting dataset
     X_aug = test_loader.dataset.getX()
@@ -855,12 +866,18 @@ def augment_new_dataset(directory, **kwargs):
     index_to_keep = [_ for _ in range(len(X_aug)) if _ not in indices_to_delete]
     X_aug = X_aug[index_to_keep]
     Y_aug = Y_aug[index_to_keep]
-    test_loader.dataset.setX(X_aug)
-    test_loader.dataset.setY(Y_aug)
-
-    train_loader.dataset.setX(X)
-    train_loader.dataset.setY(Y)
     
+    new_augmenting_dataset = dataset.Dataset(X_aug, Y_aug)
+    new_training_dataset = dataset.Dataset(X, Y)
+
+    # test_loader.dataset.setX(X_aug)
+    # test_loader.dataset.setY(Y_aug)
+    # train_loader.dataset.setX(X)
+    # train_loader.dataset.setY(Y)
+    
+    train_loader = torch.utils.data.DataLoader(new_training_dataset, batch_size=256, shuffle=True)
+    test_loader = torch.utils.data.DataLoader(new_augmenting_dataset, batch_size=1, shuffle=False)
+
     print('New size of dataset: {}'.format(len(train_loader)))
     kwargs['new_data'] = (train_loader, val_loader, test_loader, num_classes)
     return kwargs
@@ -906,11 +923,11 @@ def active_learning(**kwargs):
         model = getattr(models, opt.model)(lambas=opt.lambas, num_classes=2, weight_decay=opt.weight_decay,
                                            opt=opt).to(device)
         model.load_state_dict(torch.load(directory_model, map_location=device))
-        metrics, _, _, _, logits_dict, _, _, _, _, _, _, _, _, _ = val(model, real_test_loader, criterion, 2,
+        metrics, loss_, _, _, logits_dict, _, _, _, _, _, _, _, ece_, _ = val(model, real_test_loader, criterion, 2,
                                                                        opt)
         logits_ = list(logits_dict.items())
         dict_of_scores['round_{}'.format(al_round)] = (
-        metrics[0], metrics[1], metrics[2], metrics[3], dempster_shafer(logits_[0][1]).mean().item())
+        metrics[0], metrics[1], metrics[2], metrics[3], dempster_shafer(logits_[0][1]).mean().item(), loss_.item(), ece_[0].item())
 
         # augment data
         kwargs = augment_new_dataset(directory_model, **kwargs)
@@ -931,33 +948,22 @@ def active_learning(**kwargs):
     model = getattr(models, opt.model)(lambas=opt.lambas, num_classes=2, weight_decay=opt.weight_decay,
                                        opt=opt).to(device)
     model.load_state_dict(torch.load(directory_model, map_location=device))
-    metrics, _, _, _, logits_dict, _, _, _, _, _, _, _, _, _ = val(model, real_test_loader, criterion, 2, opt)
+    metrics, loss_, _, _, logits_dict, _, _, _, _, _, _, _, ece_, _ = val(model, real_test_loader, criterion, 2, opt)
     logits_ = list(logits_dict.items())
     dict_of_scores['round_{}'.format(opt.al_rounds)] = (
-    metrics[0], metrics[1], metrics[2], metrics[3], dempster_shafer(logits_[0][1]).mean().item())
+    metrics[0], metrics[1], metrics[2], metrics[3], dempster_shafer(logits_[0][1]).mean().item(), loss_.item(), ece_[0].item())
 
-    # frame = pd.DataFrame()
-    # frame['method'] = [str(opt.model_name)]
-    # frame['al_f1_score'] = [metrics[0]]
-    # frame['al_recall_score'] = [metrics[1]]
-    # frame['al_precision_score'] = [metrics[2]]
-    # frame['al_balAcc_score'] = [metrics[3]]
-    # logits_ = list(logits_dict.items())
-    # frame['dempster_shafer_uncertainty'] = [dempster_shafer(logits_[0][1]).mean().item()]
     if opt.model_name != "MLP_GFN":
         with open('/home/mila/b/bonaventure.dossou/GFNDropout/tasks/Scripts/al_{}.json'.format(str(opt.model_name)),
                   'w') as f:
             json.dump(dict_of_scores, f, indent=4)
         f.close()
-    # frame.to_csv('/home/mila/b/bonaventure.dossou/GFNDropout/tasks/Scripts/{}.csv'.format(),
-    #             index=False)
     else:
         with open('/home/mila/b/bonaventure.dossou/GFNDropout/tasks/Scripts/al_{}_{}.json'.format(str(opt.model_name),
                                                                                                   str(opt.mask)),
                   'w') as f:
             json.dump(dict_of_scores, f, indent=4)
         f.close()
-    # frame.to_csv('/home/mila/b/bonaventure.dossou/GFNDropout/tasks/Scripts/{}_{}.csv'.format(str(opt.model_name), str(opt.mask)),index=False)
 
 def help():
     '''help'''

@@ -29,7 +29,7 @@ python -u ../image_classification/main.py active_learning \
 										--ctype "Bernoulli" \
 										--dropout_distribution 'bernoulli' \
 										--model_name "_AL_IECU_ARMMLP_Concrete" \
-										--max_epoch 100 \
+										--max_epoch 15 \
 										# --start_from="/home/mila/b/bonaventure.dossou/GFNDropout/checkpoints/ARMMLP_IECU_ARMMLP_Concrete_20220923221017/best.model" \
 
 python -u ../image_classification/main.py active_learning \
@@ -48,7 +48,7 @@ python -u ../image_classification/main.py active_learning \
 										--al_rounds=10\
 										--dropout_distribution 'bernoulli' \
 										--model_name "_AL_IECU_ARMMLP_Contextual" \
-										--max_epoch 100 \
+										--max_epoch 15 \
 										# --start_from="/home/mila/b/bonaventure.dossou/GFNDropout/checkpoints/ARMMLP_IECU_ARMMLP_Contextual_20220924001210/best.model" \
 
 python -u ../image_classification/main.py active_learning \
@@ -70,7 +70,7 @@ python -u ../image_classification/main.py active_learning \
 										--BNN False \
 										--model_name "_AL_IECU_MLP_GFN" \
 										--beta 0.001 \
-										--max_epoch 100 \
+										--max_epoch 15 \
 										# --start_from="/home/mila/b/bonaventure.dossou/GFNDropout/checkpoints/MLP_GFN_IECU_MLP_GFN_random_False_20220924013941/best.model" \
 										
 
@@ -93,7 +93,7 @@ python -u ../image_classification/main.py active_learning \
 										--BNN False \
 										--model_name "_AL_IECU_MLP_GFN" \
 										--beta 0.001 \
-										--max_epoch 100 \
+										--max_epoch 15 \
 										# --start_from="/home/mila/b/bonaventure.dossou/GFNDropout/checkpoints/MLP_GFN_IECU_MLP_GFN_none_False_20220924025457/best.model" \
 
 python -u ../image_classification/main.py active_learning \
@@ -115,7 +115,7 @@ python -u ../image_classification/main.py active_learning \
 										--BNN False \
 										--model_name "_AL_IECU_MLP_GFN" \
 										--beta 0.001 \
-										--max_epoch 100 \
+										--max_epoch 15 \
 										# --start_from="/home/mila/b/bonaventure.dossou/GFNDropout/checkpoints/MLP_GFN_IECU_MLP_GFN_topdown_False_20220924092129/best.model" \
 
 
@@ -123,7 +123,6 @@ python -u ../image_classification/main.py active_learning \
 										--model=MLP_GFN \
 										--GFN_dropout True \
 										--dataset=iecu_al \
-										--al_rounds=10\
 										--lambas='[.0,.0,.0,.0]' \
 										--optimizer=adam \
 										--lr=0.001 \
@@ -139,7 +138,7 @@ python -u ../image_classification/main.py active_learning \
 										--BNN False \
 										--model_name "_AL_IECU_MLP_GFN" \
 										--beta 0.001 \
-										--max_epoch 100 \
+										--max_epoch 15 \
 										# --start_from="/home/mila/b/bonaventure.dossou/GFNDropout/checkpoints/MLP_GFN_IECU_MLP_GFN_bottomup_False_20220924143304/best.model" \
 
 python -u ../image_classification/main.py active_learning \
@@ -161,5 +160,5 @@ python -u ../image_classification/main.py active_learning \
 										--BNN False \
 										--model_name "_AL_IECU_MLP_GFN" \
 										--beta 0.001 \
-										--max_epoch 100 \
+										--max_epoch 15 \
 										# --start_from="/home/mila/b/bonaventure.dossou/GFNDropout/checkpoints/MLP_GFN_IECU_MLP_GFN_upNdown_False_20220924164117/best.model" \

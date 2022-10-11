@@ -50,6 +50,9 @@ def iecu_al(augment=False, batch_size=256):
     training_set = pd.read_csv(path_starting_set, delimiter=",")
     testing_set = pd.read_csv(path_augmenting_set, delimiter=",")
 
+    training_set = training_set.sample(frac=1, random_state=1234)
+    testing_set = testing_set.sample(frac=1, random_state=1234)
+
     training_targets = training_set["Death"].values
     testing_targets = testing_set["Death"].values
 
@@ -63,15 +66,11 @@ def iecu_al(augment=False, batch_size=256):
         training_features = training_features.reshape(-1, 37, 37)
         testing_features = testing_features.reshape(-1, 37, 37)
 
-    train_data, eval_data, train_data_labels, eval_data_labels = train_test_split(training_features, training_targets, test_size=0.4) #  90:10
+    eval_data, augmenting_data, eval_labels, augmenting_labels = train_test_split(testing_features, testing_targets, test_size=0.5, random_state=1234)
 
-    print('Active Learning Training Set size: {}'.format(len(train_data_labels)))
-    print('Active Learning Validation Set size: {}'.format(len(eval_data_labels)))
-    print('Active Learning Augmenting Set size: {}'.format(len(testing_targets)))
-
-    iecu_train_dataset = Dataset(torch.tensor(train_data).float(), torch.tensor(train_data_labels))
-    iecu_valid_dataset = Dataset(torch.tensor(eval_data).float(), torch.tensor(eval_data_labels))
-    iecu_test_dataset = Dataset(torch.tensor(testing_features).float(), torch.tensor(testing_targets))
+    iecu_train_dataset = Dataset(torch.tensor(training_features).float(), torch.tensor(training_targets))
+    iecu_valid_dataset = Dataset(torch.tensor(eval_data).float(), torch.tensor(eval_labels))
+    iecu_test_dataset = Dataset(torch.tensor(augmenting_data).float(), torch.tensor(augmenting_labels))
 
     train_loader = torch.utils.data.DataLoader(iecu_train_dataset, batch_size=batch_size, shuffle=True)
     validation_loader = torch.utils.data.DataLoader(iecu_valid_dataset, batch_size=batch_size, shuffle=False)
