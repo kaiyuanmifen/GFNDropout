@@ -75,8 +75,7 @@ class MLP_GFN(nn.Module):
 														hiddens=[32,32]).to(device)#q(z|x,y) 
 
 	
-		self.p_z_mask_generators=construct_unconditional_mask_generators(layer_dims=layer_dims,
-														hiddens=[32,32]).to(device)#p(z) use small capacity to regularize q_z
+		self.p_z_mask_generators=RandomMaskGenerator(dropout_rate=opt.mlp_dr)
 
 		self.q_z_mask_generators=construct_unconditional_mask_generators(layer_dims=layer_dims,
 														hiddens=[32,32]).to(device)#q(z)
@@ -107,9 +106,7 @@ class MLP_GFN(nn.Module):
 
 
 		
-		p_z_param_list = [{'params': self.p_z_mask_generators.parameters(), 'lr': mg_lr_mu,"weight_decay":0.1},]
-		self.p_z_optimizer = optim.Adam(p_z_param_list)
-	   
+		
 		q_z_param_list = [{'params': self.q_z_mask_generators.parameters(), 'lr': mg_lr_mu,"weight_decay":0.1},
 							{'params': self.LogZ_unconditional, 'lr': z_lr,"weight_decay":0.1}]
 		self.q_z_optimizer = optim.Adam(q_z_param_list)
@@ -167,7 +164,7 @@ class MLP_GFN(nn.Module):
 				logits.append(logits_.unsqueeze(2))
 			logits=torch.logsumexp(torch.cat(logits,2),2) 
 			
-		return logits
+		return logits,actual_masks
 
 
 
@@ -368,8 +365,8 @@ class MLP_GFN(nn.Module):
 				
 				###calculate p(z|x;xi)
 				Log_P_zx_l = self.p_zx_mask_generators[layer_idx].log_prob(x.clone().detach(),m)
-				#calculate p(z|xi)
-				Log_P_z_l = self.p_z_mask_generators[layer_idx].log_prob(torch.zeros(batch_size,input_dim).to(device),m)
+				#calculate p(z)
+				Log_P_z_l = self.p_z_mask_generators.log_prob(m,m)
 				
 			else:
 				previous_actual_mask=[]#use previous actual masks
@@ -385,8 +382,7 @@ class MLP_GFN(nn.Module):
 				###calculate p(zxi)
 				input_pz=torch.cat(previous_actual_mask,1)
 		
-				Log_P_z_l = self.p_z_mask_generators[layer_idx].log_prob(input_pz,m)#generate mask based on activation from previous layer, detach from BNN training
-
+				Log_P_z_l = self.p_z_mask_generators.log_prob(m,m)
 
 			Log_pzx+=Log_P_zx_l
 			Log_pz+=Log_P_z_l
@@ -516,15 +512,11 @@ class MLP_GFN(nn.Module):
 
 			##train p(z) by maximize EBLO
 
-			self.p_z_optimizer.zero_grad()
-
-			pz_loss=-Log_pz
-			pz_loss.mean().backward(retain_graph=True)
 
 
 			self.q_z_optimizer.step()
 			self.taskmodel_optimizer.step()
-			self.p_z_optimizer.step()
+	
 
 		if mask=="bottomup":
 
@@ -581,71 +573,6 @@ class MLP_GFN(nn.Module):
 
 				self.p_zx_optimizer.step()
 
-		if mask=="upNdown":
-
-				#train  q(z|x,y) and logZ by GFN loss
-				self.q_zxy_optimizer.zero_grad()
-
-				GFN_loss_upNdown.mean().backward(retain_graph=True)
-
-				
-				#train task model by maximizing ELBO
-				if self.opt.BNN==True:
-
-					#a different equation if using BNN
-					
-					kl_loss = bnn.BKLLoss(reduction='mean', last_layer_only=False)
-
-					kl_1 = kl_loss(self.fc)
-
-					kl_2 = kl_loss(self.out_layer)
-
-					kl=kl_1+kl_2
-
-					metric['kl_loss']=(kl).item()
-
-					taskmodel_loss=kl+self.N*CEloss+self.N*(LogPF_qzxy-Log_pzx)#loss BNN, in real practice detach BNN and qzxy,pzx trainng
-
-					self.taskmodel_optimizer.zero_grad()
-
-					taskmodel_loss.mean().backward(retain_graph=True)
-					
-					#self.taskmodel_optimizer.step()
-
-				else:
-
-					self.taskmodel_optimizer.zero_grad()
-
-					taskmodel_loss=CEloss
-					taskmodel_loss.mean().backward(retain_graph=True)
-
-					#self.taskmodel_optimizer.step()
-
-
-				##train p(z|x) by maximize EBLO
-
-				self.p_zx_optimizer.zero_grad()
-
-				pzx_loss=-Log_pzx
-				pzx_loss.mean().backward(retain_graph=True)
-
-
-
-				###train p(z)
-				self.p_z_optimizer.zero_grad()
-
-				pz_loss=-Log_pz
-				pz_loss.mean().backward(retain_graph=True)		
-
-
-
-				self.taskmodel_optimizer.step()
-
-				self.q_zxy_optimizer.step()
-
-				self.p_zx_optimizer.step()
-
-				self.p_z_optimizer.step()
 
 		if mask=="random" or mask=="none":
 
@@ -715,7 +642,7 @@ class RandomMaskGenerator(nn.Module):
 		return torch.bernoulli((1. - self.dropout_rate) * torch.ones(x.shape))
 
 	def log_prob(self, x, m):
-		dist = (1. - self.dropout_rate) * torch.ones(x.shape)
+		dist = (1. - self.dropout_rate) * torch.ones(x.shape).to(device)
 		probs = dist * m + (1. - dist) * (1. - m)
 		return torch.log(probs).sum(1)
 

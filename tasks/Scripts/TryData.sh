@@ -19,23 +19,23 @@ conda activate GFlownets
 
 
 
-python ../image_classification/main.py train \
-										--model=ResNet_GFN \
-										--GFN_dropout True \
-										--dropout_rate 0.5 \
-										--dataset=cifar100 \
-										--lambas=.001 \
-										--add_noisedata=False \
-										--concretedp False \
-										--dptype False \
-										--fixdistrdp False \
-										--ctype "Bernoulli" \
-										--dropout_distribution 'bernoulli' \
-										--model_name "_CIFAR_ResNet_GFN" \
-										--mask "topdown" \
-										--BNN False \
-										--augment_test=False \
-										--subset_size=1024 \
+# python ../image_classification/main.py train \
+# 										--model=ResNet_GFN \
+# 										--GFN_dropout True \
+# 										--dropout_rate 0.5 \
+# 										--dataset=cifar100 \
+# 										--lambas=.001 \
+# 										--add_noisedata=False \
+# 										--concretedp False \
+# 										--dptype False \
+# 										--fixdistrdp False \
+# 										--ctype "Bernoulli" \
+# 										--dropout_distribution 'bernoulli' \
+# 										--model_name "_CIFAR_ResNet_GFN" \
+# 										--mask "bottomup" \
+# 										--BNN False \
+# 										--augment_test=False \
+# 										--subset_size=1024 \
 										
 
 
@@ -43,7 +43,7 @@ python ../image_classification/main.py train \
 # python ../image_classification/main.py test \
 # 										--model=ARMWideResNet \
 # 										--GFN_dropout False \
-# 										--dataset=cifar100c \
+# 										--dataset=cifar10 \
 # 										--lambas=.001 \
 # 										--optimizer=momentum \
 # 										--lr=0.1 \
@@ -58,3 +58,19 @@ python ../image_classification/main.py train \
 #  										--corruption_severity=3 \
 										
 
+python ../image_classification/main.py test \
+										--model=ResNet_GFN \
+										--GFN_dropout True \
+										--dropout_rate 0.5 \
+										--dataset=cifar10 \
+										--lambas=.001 \
+										--add_noisedata=False \
+										--concretedp False \
+										--dptype False \
+										--fixdistrdp False \
+										--ctype "Bernoulli" \
+										--dropout_distribution 'bernoulli' \
+										--model_name "_ResNet_GFN" \
+										--mask "bottomup" \
+										--BNN False \
+										--augment_test=False \

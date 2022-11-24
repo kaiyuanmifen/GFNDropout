@@ -545,6 +545,7 @@ def val(model, dataloader, criterion, num_classes, opt):
         if opt.GFN_dropout==True:
             score,actual_masks,masks_qz,masks_qzxy,LogZ_unconditional,LogPF_qz,LogR_qz,LogPB_qz,LogPF_BNN,LogZ_conditional,LogPF_qzxy,LogR_qzxy,LogPB_qzxy,Log_pzx,Log_pz  = model.GFN_forward(input_,label,mask=opt.mask)
 
+        
 
         ####
         label_tensors = torch.cat((label_tensors, label.cpu()), 0)

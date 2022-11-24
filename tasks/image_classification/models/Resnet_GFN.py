@@ -70,8 +70,7 @@ class ResNet_GFN(nn.Module):
 														hiddens=[32,32]).to(device)#q(z|x,y) 
 
 	
-		self.p_z_mask_generators=construct_unconditional_mask_generators(layer_dims=[x[0] for x in maskgenerator_input_shapes],
-														hiddens=hiddens).to(device)#p(z)
+		self.p_z_mask_generators=RandomMaskGenerator(dropout_rate=opt.mlp_dr)
 
 		self.q_z_mask_generators=construct_unconditional_mask_generators(layer_dims=[x[0] for x in maskgenerator_input_shapes],
 														hiddens=hiddens).to(device)#q(z)
@@ -101,9 +100,6 @@ class ResNet_GFN(nn.Module):
 		self.beta=1 #temperature on rewards
 
 
-		
-		p_z_param_list = [{'params': self.p_z_mask_generators.parameters(), 'lr': mg_lr_mu,"weight_decay":0.1},]
-		self.p_z_optimizer = optim.Adam(p_z_param_list)
 	   
 		q_z_param_list = [{'params': self.q_z_mask_generators.parameters(), 'lr': mg_lr_mu,"weight_decay":0.1},
 							{'params':self.LogZ_unconditional, 'lr': z_lr,"weight_decay":0.1}]
@@ -294,7 +290,7 @@ class ResNet_GFN(nn.Module):
 					if block_idx>=6:
 				
 						layer_idx=block_idx-6
-						if ("bottomup" in mask) or ("upNdown" in mask):
+						if ("bottomup" in mask) or ("bNL" in mask):
 
 							if self.train:
 								#during training use q(z|x,y;phi) to sample mask
@@ -354,9 +350,11 @@ class ResNet_GFN(nn.Module):
 						elif mask=="topdown":
 							m_qz_l=masks_qz[layer_idx][-1]  
 							m=m_qz_l
-						elif mask=="bottomup" or mask=="upNdown":   
+						elif mask=="bottomup":   
 							m=m_conditional_l
-
+						elif mask=="bNL":
+							m_qz_l=masks_qz[layer_idx][-1]  
+							m=m_qz_l*m_conditional_l
 
 						elif mask=="none":
 							m=torch.ones(out.shape[0],out.shape[1]).to(device)
@@ -369,7 +367,7 @@ class ResNet_GFN(nn.Module):
 							###calculate p(z|x;xi)
 							Log_P_zx_l = self.p_zx_mask_generators[layer_idx].log_prob(out.reshape(batch_size,-1).clone().detach(),m)
 							#calculate p(z|xi)
-							Log_P_z_l = self.p_z_mask_generators[layer_idx].log_prob(torch.zeros(batch_size,784).to(device),m)
+							Log_P_z_l = self.p_z_mask_generators.log_prob(m,m)
 							
 						else:
 							previous_actual_mask=[]#use previous actual masks
@@ -382,10 +380,9 @@ class ResNet_GFN(nn.Module):
 							Log_P_zx_l = self.p_zx_mask_generators[layer_idx].log_prob(input_pzx,m)#generate mask based on activation from previous layer, detach from BNN training
 
 
-							###calculate p(zxi)
-							input_pz=torch.cat(previous_actual_mask,1)
-					
-							Log_P_z_l = self.p_z_mask_generators[layer_idx].log_prob(input_pz,m)#generate mask based on activation from previous layer, detach from BNN training
+							###calculate p(z;xi)
+							
+							Log_P_z_l = self.p_z_mask_generators.log_prob(m,m)#generate mask based on activation from previous layer, detach from BNN training
 
 
 						Log_pzx+=Log_P_zx_l
@@ -443,11 +440,7 @@ class ResNet_GFN(nn.Module):
 		LogR_conditional=self.beta*LL.detach().clone()+Log_pzx.detach().clone()
 		GFN_loss_conditional=(LogZ_conditional+LogPF_qzxy-LogR_conditional-LogPB_qzxy)**2#+kl_weight*kl#jointly train the last layer BNN and the mask generator
 		
-		#LogR_upNdown=self.beta*self.N*(LL.detach().clone()+Log_pzx.detach().clone())+Log_pz.detach().clone()
-		LogR_upNdown=self.beta*(LL.detach().clone())+Log_pzx.detach().clone()+Log_pz.detach().clone()
-		GFN_loss_upNdown=(LogZ_conditional+LogPF_qzxy-LogR_upNdown-LogPB_qzxy)**2#+kl_weight*kl#jointly train the last layer BNN and the mask generator
-		
-
+	
 		# Update model
 
 		acc = (torch.argmax(logits, dim=1) == y).sum().item() / len(y)
@@ -509,18 +502,11 @@ class ResNet_GFN(nn.Module):
 				#self.taskmodel_optimizer.step()
 
 
-			##train p(z) by maximize EBLO
-
-			self.p_z_optimizer.zero_grad()
-
-			pz_loss=-Log_pz
-			pz_loss.mean().backward(retain_graph=True)
-
+	
 
 			self.q_z_optimizer.step()
 			self.taskmodel_optimizer.step()
-			self.p_z_optimizer.step()
-
+	
 		if mask=="bottomup":
 
 				#train  q(z|x,y) and logZ by GFN loss
@@ -576,71 +562,43 @@ class ResNet_GFN(nn.Module):
 
 				self.p_zx_optimizer.step()
 
-		if mask=="upNdown":
+		if mask=="bNL":
 
-				#train  q(z|x,y) and logZ by GFN loss
-				self.q_zxy_optimizer.zero_grad()
+			#train  q(z) and logZ by GFN loss
+			self.q_z_optimizer.zero_grad()
 
-				GFN_loss_upNdown.mean().backward(retain_graph=True)
-
-				
-				#train task model by maximizing ELBO
-				if self.opt.BNN==True:
-
-					#a different equation if using BNN
-					
-					kl_loss = bnn.BKLLoss(reduction='mean', last_layer_only=False)
-
-					kl_1 = kl_loss(self.fc)
-
-					kl_2 = kl_loss(self.out_layer)
-
-					kl=kl_1+kl_2
-
-					metric['kl_loss']=(kl).item()
-
-					taskmodel_loss=kl+self.N*CEloss+self.N*(LogPF_qzxy-Log_pzx)#loss BNN, in real practice detach BNN and qzxy,pzx trainng
-
-					self.taskmodel_optimizer.zero_grad()
-
-					taskmodel_loss.mean().backward(retain_graph=True)
-					
-					#self.taskmodel_optimizer.step()
-
-				else:
-
-					self.taskmodel_optimizer.zero_grad()
-
-					taskmodel_loss=CEloss
-					taskmodel_loss.mean().backward(retain_graph=True)
-
-					#self.taskmodel_optimizer.step()
+			GFN_loss_unconditional.mean().backward(retain_graph=True)
 
 
-				##train p(z|x) by maximize EBLO
+			self.q_zxy_optimizer.zero_grad()
 
-				self.p_zx_optimizer.zero_grad()
+			GFN_loss_conditional.mean().backward(retain_graph=True)
 
-				pzx_loss=-Log_pzx
-				pzx_loss.mean().backward(retain_graph=True)
+			self.p_zx_optimizer.zero_grad()
+
+			pzx_loss=-Log_pzx
+			pzx_loss.mean().backward(retain_graph=True)
+			
+
+			if self.opt.BNN==True:
+
+				print("not implemented")
+			else:
+				self.taskmodel_optimizer.zero_grad()
+
+				taskmodel_loss=CEloss
+				taskmodel_loss.mean().backward(retain_graph=True)
 
 
 
-				###train p(z)
-				self.p_z_optimizer.zero_grad()
 
-				pz_loss=-Log_pz
-				pz_loss.mean().backward(retain_graph=True)		
+			self.q_z_optimizer.step()
+			self.taskmodel_optimizer.step()
+			self.q_zxy_optimizer.step()
+			self.p_zx_optimizer.step()
 
+			
 
-
-				self.taskmodel_optimizer.step()
-
-				self.q_zxy_optimizer.step()
-
-				self.p_zx_optimizer.step()
-
-				self.p_z_optimizer.step()
 
 		if mask=="random" or mask=="none":
 
