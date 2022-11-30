@@ -2,7 +2,7 @@
 #SBATCH --job-name=VQA_contextual
 #SBATCH --gres=gpu:1               # Number of GPUs (per node)
 #SBATCH --mem=65G               # memory (per node)
-#SBATCH --time=0-8:50            # time (DD-HH:MM)
+#SBATCH --time=0-10:50            # time (DD-HH:MM)
 
 
 ###########cluster information above this line

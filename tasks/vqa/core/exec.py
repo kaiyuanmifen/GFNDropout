@@ -19,6 +19,8 @@ import scipy.stats as sts
 from six.moves import cPickle
 from ece import ECELoss
 
+import torch.optim as optimizer
+
 def setup_seed_2(seed):
     np.random.seed(seed)
 
@@ -118,6 +120,34 @@ class Execution:
             optim = get_optim(self.HP, net, data_size)
             start_epoch = 0
 
+
+        if self.HP.GFlowOut!="none":
+            ####GFN related optimizer
+            z_lr=1e-1
+            mg_lr_z=1e-3
+            mg_lr_mu=1e-3
+            
+            q_z_param_list = [  {'params': net.backbone.dec_list_GFN[0].q_z_mask_generators.parameters(), 'lr': mg_lr_mu,"weight_decay":0.1},
+                                {'params': net.backbone.dec_list_GFN[1].q_z_mask_generators.parameters(), 'lr': mg_lr_mu,"weight_decay":0.1},
+                                {'params': net.backbone.dec_list_GFN[2].q_z_mask_generators.parameters(), 'lr': mg_lr_mu,"weight_decay":0.1},
+                                {'params': net.backbone.LogZ_unconditional, 'lr': z_lr,"weight_decay":0.1}]
+            q_z_optimizer = optimizer.Adam(q_z_param_list)
+
+
+            p_zx_param_list = [{'params': net.backbone.dec_list_GFN[0].p_zx_mask_generators.parameters(), 'lr': mg_lr_mu,"weight_decay":0.1},
+                                {'params': net.backbone.dec_list_GFN[1].p_zx_mask_generators.parameters(), 'lr': mg_lr_mu,"weight_decay":0.1},
+                                {'params': net.backbone.dec_list_GFN[2].p_zx_mask_generators.parameters(), 'lr': mg_lr_mu,"weight_decay":0.1},]
+            p_zx_optimizer = optimizer.Adam(p_zx_param_list)
+            
+            
+            q_zxy_param_list = [{'params': net.backbone.dec_list_GFN[0].q_zxy_mask_generators.parameters(), 'lr': mg_lr_z,"weight_decay":0.1},
+                                {'params': net.backbone.dec_list_GFN[1].q_zxy_mask_generators.parameters(), 'lr': mg_lr_z,"weight_decay":0.1},
+                                {'params': net.backbone.dec_list_GFN[2].q_zxy_mask_generators.parameters(), 'lr': mg_lr_z,"weight_decay":0.1},
+                                {'params': net.backbone.ans_projector.parameters(), 'lr': mg_lr_z,"weight_decay":0.1},
+                                {'params': net.backbone.LogZ_unconditional, 'lr': z_lr,"weight_decay":0.1}]
+            q_zxy_optimizer = optimizer.Adam(q_zxy_param_list)
+
+
         loss_sum = 0
         named_params = list(net.named_parameters())
         grad_norm = np.zeros(len(named_params))
@@ -191,49 +221,93 @@ class Execution:
                     sub_ans_iter = \
                         ans_iter[accu_step * self.HP.SUB_BATCH_SIZE:
                                  (accu_step + 1) * self.HP.SUB_BATCH_SIZE]
-                    if self.HP.ARM and self.HP.dp_type and self.HP.ctype != "Gaussian":
-                        self.forward_mode(True)
+                    
 
-                    if self.HP.add_noise:
-                        gaussian_noise = np.random.normal(size=sub_img_feat_iter.size()) * self.HP.noise_scalar
-                        gaussian_noise = torch.from_numpy(gaussian_noise).type_as(sub_img_feat_iter).cuda()
-                        sub_img_feat_iter = sub_img_feat_iter + gaussian_noise
+                    if self.HP.GFlowOut!="none":
+                        q_zxy_optimizer.zero_grad()
+                        p_zx_optimizer.zero_grad()
+                        q_z_optimizer.zero_grad()
+                        pred,LogZ_unconditional,LogPF_qz,LogPB_qz,LogPF_BNN,LogPB_BNN,LogPF_qzxy,LogPB_qzxy,Log_pzx,Log_pz = net(
+                            sub_img_feat_iter,
+                            sub_ques_ix_iter,
+                            sub_ans_iter
+                        )
+                        loss = loss_fn_keep(pred, sub_ans_iter).sum(1)
+                        # only mean-reduction needs be divided by grad_accu_steps
+                        # removing this line wouldn't change our results because the speciality of Adam optimizer,
+                        # but would be necessary if you use SGD optimizer.
+                        # loss /= self.__C.GRAD_ACCU_STEPS
+              
+                        ####GFN loss
+                        LL=-loss
+        
 
-                    pred = net(
-                        sub_img_feat_iter,
-                        sub_ques_ix_iter
-                    )
-                    loss = loss_fn(pred, sub_ans_iter)
-                    if self.HP.ARM and self.HP.dp_type and self.HP.ctype != "Gaussian":
-                        loss_keep = loss_fn_keep(pred, sub_ans_iter).sum(1)
-                        penalty = 0
-                        prior_sum = 0
-                        for layer in self.dropout_list:
-                            nll_shape = len(layer.post_nll_true.shape)
-                            penalty = penalty + layer.post_nll_true.mean(tuple(np.arange(1, nll_shape))).data - \
-                                      layer.prior_nll_true.mean(tuple(np.arange(1, nll_shape))).data
-                            prior_sum = prior_sum + layer.prior_nll_true.mean(tuple(np.arange(1, nll_shape)))
-                        if self.HP.learn_prior:
-                            prior_sum.mean().backward(retain_graph=True)
-                        f2 = loss_keep.data - penalty
-                        self.forward_mode(False)
+                        beta=1
+                        N=214354
+                        LogR_unconditional=beta*N*LL.detach().clone()+Log_pz.detach().clone()
+                        GFN_loss_unconditional=(LogZ_unconditional+LogPF_qz-LogR_unconditional-LogPB_qz)**2#+kl_weight*kl#jointly train the last layer BNN and the mask generator
+
+                        LogR_conditional=beta*LL.detach().clone()+Log_pzx.detach().clone()
+                        GFN_loss_conditional=(LogZ_unconditional+LogPF_qzxy-LogR_conditional-LogPB_qzxy)**2#+kl_weight*kl#jointly train the last layer BNN and the mask generator
+
+                        loss=loss.sum()
+                        loss_sum += loss.cpu().data.numpy() * self.HP.GRAD_ACCU_STEPS
+                        
+                        if self.HP.GFlowOut=="bottomup":
+                            GFN_loss_conditional.sum().backward(retain_graph=True)
+                            pzx_loss=-Log_pzx
+                            pzx_loss.sum().backward(retain_graph=True)
+                            loss.backward(retain_graph=True)
+
+                            q_zxy_optimizer.step()
+
+                            p_zx_optimizer.step()
+                    else:
+                        if self.HP.ARM and self.HP.dp_type and self.HP.ctype != "Gaussian":
+                            self.forward_mode(True)
+
+                        if self.HP.add_noise:
+                            gaussian_noise = np.random.normal(size=sub_img_feat_iter.size()) * self.HP.noise_scalar
+                            gaussian_noise = torch.from_numpy(gaussian_noise).type_as(sub_img_feat_iter).cuda()
+                            sub_img_feat_iter = sub_img_feat_iter + gaussian_noise
+
+
                         pred = net(
                             sub_img_feat_iter,
                             sub_ques_ix_iter
                         )
-                        loss_keep = loss_fn_keep(pred, sub_ans_iter).sum(1)
-                        penalty = 0
-                        for layer in self.dropout_list:
-                            nll_shape = len(layer.post_nll_true.shape)
-                            penalty = penalty + layer.post_nll_true.mean(tuple(np.arange(1, nll_shape))).data - \
-                                      layer.prior_nll_true.mean(tuple(np.arange(1, nll_shape))).data
-                        f1 = loss_keep.data - penalty#.data
-                        self.update_phi_gradient(f1, f2)
 
-                    loss /= self.HP.GRAD_ACCU_STEPS
-                    # loss.backward(retain_graph=True)
-                    loss.backward()
-                    loss_sum += loss.cpu().data.numpy() * self.HP.GRAD_ACCU_STEPS
+                        loss = loss_fn(pred, sub_ans_iter)
+                        if self.HP.ARM and self.HP.dp_type and self.HP.ctype != "Gaussian":
+                            loss_keep = loss_fn_keep(pred, sub_ans_iter).sum(1)
+                            penalty = 0
+                            prior_sum = 0
+                            for layer in self.dropout_list:
+                                nll_shape = len(layer.post_nll_true.shape)
+                                penalty = penalty + layer.post_nll_true.mean(tuple(np.arange(1, nll_shape))).data - \
+                                          layer.prior_nll_true.mean(tuple(np.arange(1, nll_shape))).data
+                                prior_sum = prior_sum + layer.prior_nll_true.mean(tuple(np.arange(1, nll_shape)))
+                            if self.HP.learn_prior:
+                                prior_sum.mean().backward(retain_graph=True)
+                            f2 = loss_keep.data - penalty
+                            self.forward_mode(False)
+                            pred = net(
+                                sub_img_feat_iter,
+                                sub_ques_ix_iter
+                            )
+                            loss_keep = loss_fn_keep(pred, sub_ans_iter).sum(1)
+                            penalty = 0
+                            for layer in self.dropout_list:
+                                nll_shape = len(layer.post_nll_true.shape)
+                                penalty = penalty + layer.post_nll_true.mean(tuple(np.arange(1, nll_shape))).data - \
+                                          layer.prior_nll_true.mean(tuple(np.arange(1, nll_shape))).data
+                            f1 = loss_keep.data - penalty#.data
+                            self.update_phi_gradient(f1, f2)
+
+                        loss /= self.HP.GRAD_ACCU_STEPS
+                        # loss.backward(retain_graph=True)
+                        loss.backward()
+                        loss_sum += loss.cpu().data.numpy() * self.HP.GRAD_ACCU_STEPS
 
                     if self.HP.VERBOSE:
                         if dataset_eval is not None:

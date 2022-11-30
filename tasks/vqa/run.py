@@ -157,6 +157,10 @@ def parse_args():
                       help='bottom up features root path',
                       type=str)
 
+    parser.add_argument('--GFN', dest='GFlowOut',
+                  help='which GFlowOut method to use', default='none',
+                  type=str)
+
     args = parser.parse_args()
     return args
 
@@ -184,6 +188,8 @@ if __name__ == '__main__':
 
     print('Hyper Parameters:')
     print(HP)
+    print("GFlowOut")
+    print(HP.GFlowOut)
 
     HP.check_path()
 

@@ -6,6 +6,7 @@
 
 from core.model.net_utils import FC, MLP, LayerNorm
 from core.model.mca import MCA_ED
+from core.model_GFN.mca_GFN import MCA_ED_GFN
 
 import torch.nn as nn
 import torch.nn.functional as F
@@ -64,6 +65,7 @@ class Net(nn.Module):
     def __init__(self, HP, pretrained_emb, token_size, answer_size):
         super(Net, self).__init__()
 
+        self.HP=HP
         self.embedding = nn.Embedding(
             num_embeddings=token_size,
             embedding_dim=HP.WORD_EMBED_SIZE
@@ -85,7 +87,10 @@ class Net(nn.Module):
             HP.HIDDEN_SIZE
         )
 
-        self.backbone = MCA_ED(HP)
+        if self.HP.GFlowOut=="none":
+        	self.backbone = MCA_ED(HP)
+        else:
+        	self.backbone = MCA_ED_GFN(HP)
 
         self.attflat_img = AttFlat(HP, [64, 100, 512])
         self.attflat_lang = AttFlat(HP, [64, 14, 512])
@@ -94,8 +99,10 @@ class Net(nn.Module):
         self.proj = nn.Linear(HP.FLAT_OUT_SIZE, answer_size)
 
 
-    def forward(self, img_feat, ques_ix):
-
+    def forward(self, img_feat, ques_ix,ans=None):
+        '''
+        ans is only used during training
+        '''
         # Make mask
         lang_feat_mask = self.make_mask(ques_ix.unsqueeze(2))
         img_feat_mask = self.make_mask(img_feat)
@@ -108,13 +115,21 @@ class Net(nn.Module):
         img_feat = self.img_feat_linear(img_feat)
 
         # Backbone Framework
-        lang_feat, img_feat = self.backbone(
-            lang_feat,
-            img_feat,
-            lang_feat_mask,
-            img_feat_mask
-        )
-
+        if self.HP.GFlowOut=="none":
+            lang_feat, img_feat = self.backbone(
+                lang_feat,
+                img_feat,
+                lang_feat_mask,
+                img_feat_mask
+            )
+        else:
+            lang_feat, img_feat,LogZ_unconditional,all_LogPF_qz,all_LogPB_qz,all_LogPF_BNN,all_LogPB_BNN,all_LogPF_qzxy,all_LogPB_qzxy,all_Log_pzx,all_Log_pz = self.backbone(
+                lang_feat,
+                img_feat,
+                lang_feat_mask,
+                img_feat_mask,
+                ans
+            )
         lang_feat = self.attflat_lang(
             lang_feat,
             lang_feat_mask
@@ -129,8 +144,10 @@ class Net(nn.Module):
         proj_feat = self.proj_norm(proj_feat)
         proj_feat = torch.sigmoid(self.proj(proj_feat))
 
-        return proj_feat
-
+        if self.HP.GFlowOut=="none":
+            return proj_feat
+        else:
+            return proj_feat,LogZ_unconditional,all_LogPF_qz,all_LogPB_qz,all_LogPF_BNN,all_LogPB_BNN,all_LogPF_qzxy,all_LogPB_qzxy,all_Log_pzx,all_Log_pz
 
     # Masking
     def make_mask(self, feature):

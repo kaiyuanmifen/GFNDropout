@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=VQA_concrete
+#SBATCH --job-name=VQA_MC
 #SBATCH --gres=gpu:1               # Number of GPUs (per node)
 #SBATCH --mem=65G               # memory (per node)
 #SBATCH --time=0-10:50            # time (DD-HH:MM)
@@ -18,16 +18,16 @@ conda activate GFlownets
 
 
 python3 ../vqa/run.py \
-		--RUN='train' \
-		--VERSION='concrete' \
-		--SPLIT='train' \
-		--DP_TYPE=0 \
-		--CONCRETE=1 \
-		--LEARNPRIOR=0 \
-		--DP_K=0.01 \
-		--DP_ETA=-294 \
-		--ARM=0 \
-		--GPU='0' \
-		--CTYPE="Bernoulli" \
-		--add_noise=0 \
-		--noise_scalar=5.0					
+			--RUN='train' \
+			--VERSION='mc_bernoulli' \
+			--SPLIT='train' \
+			--DP_TYPE=0 \
+			--CONCRETE=0 \
+			--LEARNPRIOR=1 \
+			--DP_K=0.01 \
+			--DP_ETA=-294 \
+			--ARM=0 \
+			--dropout_distribution="bernoulli" \
+			--GPU='0' \
+			--add_noise=0 \
+			--noise_scalar=5.0			
