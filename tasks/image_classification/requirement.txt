@@ -1,6 +1,0 @@
-pytorch>1.0.0
-tnt
-fire
-tqdm
-numpy
-tensorboardX
