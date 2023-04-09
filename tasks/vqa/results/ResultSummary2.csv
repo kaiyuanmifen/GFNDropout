@@ -1,0 +1,8 @@
+﻿Method,Test data,acc.(all),acc.(yes/no),acc.(number),acc.(other)
+GFlowOut,Original ,67.07,84.67,49.13,58.44
+Contextual,Original ,66.89,84.48,49.04,58.24
+Concrete,Original ,66.92,84.51,48.66,58.38
+,,,,,
+GFlowOut,Noisy,50.55,73.99,33.01,37.36
+Contextual,Noisy,49.72,73.81,32.4,35.97
+Concrete,Noisy,50.2,73.5,31.45,37.29
