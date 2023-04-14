@@ -130,20 +130,29 @@ class Execution:
             mg_lr_z=1e-3
             mg_lr_mu=1e-3
             
-            q_z_param_list = [  {'params': net.backbone.dec_list_GFN[0].q_z_mask_generators.parameters(), 'lr': mg_lr_mu,"weight_decay":0.1},
+            q_z_param_list = [  {'params': net.backbone.enc_list_GFN[0].q_z_mask_generators.parameters(), 'lr': mg_lr_mu,"weight_decay":0.1},
+                                {'params': net.backbone.enc_list_GFN[1].q_z_mask_generators.parameters(), 'lr': mg_lr_mu,"weight_decay":0.1},
+                                {'params': net.backbone.enc_list_GFN[2].q_z_mask_generators.parameters(), 'lr': mg_lr_mu,"weight_decay":0.1},
+                                {'params': net.backbone.dec_list_GFN[0].q_z_mask_generators.parameters(), 'lr': mg_lr_mu,"weight_decay":0.1},
                                 {'params': net.backbone.dec_list_GFN[1].q_z_mask_generators.parameters(), 'lr': mg_lr_mu,"weight_decay":0.1},
                                 {'params': net.backbone.dec_list_GFN[2].q_z_mask_generators.parameters(), 'lr': mg_lr_mu,"weight_decay":0.1},
                                 {'params': net.backbone.LogZ_unconditional, 'lr': z_lr,"weight_decay":0.1}]
             q_z_optimizer = optimizer.Adam(q_z_param_list)
 
 
-            p_zx_param_list = [{'params': net.backbone.dec_list_GFN[0].p_zx_mask_generators.parameters(), 'lr': mg_lr_mu,"weight_decay":0.1},
+            p_zx_param_list = [{'params': net.backbone.enc_list_GFN[0].p_zx_mask_generators.parameters(), 'lr': mg_lr_mu,"weight_decay":0.1},
+                                {'params': net.backbone.enc_list_GFN[1].p_zx_mask_generators.parameters(), 'lr': mg_lr_mu,"weight_decay":0.1},
+                                {'params': net.backbone.enc_list_GFN[2].p_zx_mask_generators.parameters(), 'lr': mg_lr_mu,"weight_decay":0.1},
+                                {'params': net.backbone.dec_list_GFN[0].p_zx_mask_generators.parameters(), 'lr': mg_lr_mu,"weight_decay":0.1},
                                 {'params': net.backbone.dec_list_GFN[1].p_zx_mask_generators.parameters(), 'lr': mg_lr_mu,"weight_decay":0.1},
                                 {'params': net.backbone.dec_list_GFN[2].p_zx_mask_generators.parameters(), 'lr': mg_lr_mu,"weight_decay":0.1},]
             p_zx_optimizer = optimizer.Adam(p_zx_param_list)
             
             
-            q_zxy_param_list = [{'params': net.backbone.dec_list_GFN[0].q_zxy_mask_generators.parameters(), 'lr': mg_lr_z,"weight_decay":0.1},
+            q_zxy_param_list = [{'params': net.backbone.enc_list_GFN[0].q_zxy_mask_generators.parameters(), 'lr': mg_lr_z,"weight_decay":0.1},
+                                {'params': net.backbone.enc_list_GFN[1].q_zxy_mask_generators.parameters(), 'lr': mg_lr_z,"weight_decay":0.1},
+                                {'params': net.backbone.enc_list_GFN[2].q_zxy_mask_generators.parameters(), 'lr': mg_lr_z,"weight_decay":0.1},
+                                {'params': net.backbone.dec_list_GFN[0].q_zxy_mask_generators.parameters(), 'lr': mg_lr_z,"weight_decay":0.1},
                                 {'params': net.backbone.dec_list_GFN[1].q_zxy_mask_generators.parameters(), 'lr': mg_lr_z,"weight_decay":0.1},
                                 {'params': net.backbone.dec_list_GFN[2].q_zxy_mask_generators.parameters(), 'lr': mg_lr_z,"weight_decay":0.1},
                                 {'params': net.backbone.ans_projector.parameters(), 'lr': mg_lr_z,"weight_decay":0.1},
@@ -244,9 +253,12 @@ class Execution:
                         ####GFN loss
                         LL=-loss
         
-
-                        beta=1
-                        N=214354
+                        if self.HP.GFlowOut=="bottomup":
+                            beta=1
+                        elif self.HP.GFlowOut=="topdown":
+                            beta=1.0/200000 #beta*N too big will result in optimization problem
+                        
+                        N=214354 #sample size
                         LogR_unconditional=beta*N*LL.detach().clone()+Log_pz.detach().clone()
                         GFN_loss_unconditional=(LogZ_unconditional+LogPF_qz-LogR_unconditional-LogPB_qz)**2#+kl_weight*kl#jointly train the last layer BNN and the mask generator
 
@@ -265,6 +277,12 @@ class Execution:
                             q_zxy_optimizer.step()
 
                             p_zx_optimizer.step()
+
+                        elif self.HP.GFlowOut=="topdown":
+                            GFN_loss_unconditional.sum().backward(retain_graph=True)
+                            loss.backward(retain_graph=True)
+                            q_z_optimizer.step()
+                            
                     else:
                         if self.HP.ARM and self.HP.dp_type and self.HP.ctype != "Gaussian":
                             self.forward_mode(True)

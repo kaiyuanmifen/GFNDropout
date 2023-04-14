@@ -14,11 +14,11 @@ device=torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 class BasicBlock(nn.Module):
     def __init__(self, in_planes, out_planes, stride, droprate_init=0.0, weight_decay=0., lamba=0.01, local_rep=False,opt=None):
         super(BasicBlock, self).__init__()
-        self.bn1 = nn.BatchNorm2d(in_planes)
+        
         self.conv1 = ArmConv2d(in_planes, out_planes, kernel_size=3, stride=1, padding=1, bias=False,
                                droprate_init=droprate_init, weight_decay=weight_decay / (1 - 0.3),
                                local_rep=local_rep, lamba=lamba,opt=opt)
-
+        self.bn1 = nn.BatchNorm2d(out_planes)
         self.bn2 = nn.BatchNorm2d(out_planes)
         self.conv2 = MAPConv2d(out_planes, out_planes, kernel_size=3, stride=stride, padding=1, bias=False,
                                weight_decay=weight_decay)
@@ -30,16 +30,20 @@ class BasicBlock(nn.Module):
 
         self.to(device)
     def forward(self, x):
-        if not self.equalInOut:
-            x = F.relu(self.bn1(x))
-            #x = F.relu (x)
-        else:
-            out = F.relu(self.bn1(x))
-            #out = F.relu(x)
-        out = self.conv1(out if self.equalInOut else x)
-        out = self.conv2(F.relu(self.bn2(out)))
-        #out = self.conv2(F.relu(out))
-        return torch.add(out, x if self.equalInOut else self.convShortcut(x))
+        #the following are manual reordering by Dianbo
+        out = self.conv1(x)
+        out = F.relu(self.bn1(out))
+        out = self.conv2(out)
+        out=self.bn2(out)
+        #the following are original code by the original authors
+        # if not self.equalInOut:
+        #     x = F.relu(self.bn1(x))
+        # else:
+        #     out = F.relu(self.bn1(x))
+        # out = self.conv1(out if self.equalInOut else x)
+        # out = self.conv2(F.relu(self.bn2(out)))
+        
+        return F.relu(torch.add(out, x if self.equalInOut else self.convShortcut(x)))
 
 
 class NetworkBlock(nn.Module):

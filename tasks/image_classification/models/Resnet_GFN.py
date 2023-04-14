@@ -49,7 +49,7 @@ class ResNet_GFN(nn.Module):
 		self.temperature=2 # temperature in sigmoid , high temperature more close the p to 0.5 for binary mask
 
 
-		maskgenerator_input_shapes=[(512,4,4),(512,4,4)]#only apply dropout out on the last two blocks of resent18
+		maskgenerator_input_shapes=[(64,32,32),(64,32,32),(128,16,16),(128,16,16),(256,8,8),(256,8,8),(512,4,4),(512,4,4)]#only apply dropout out on the last two blocks of resent18
 		self.maskgenerator_input_shapes=maskgenerator_input_shapes
 	   
 	
@@ -59,7 +59,9 @@ class ResNet_GFN(nn.Module):
 		self.rand_mask_generator=RandomMaskGenerator(dropout_rate=opt.mlp_dr)
 
 		hiddens=[32,32]
-		self.p_zx_mask_generators=construct_conditional_mask_generators(layer_dims=maskgenerator_input_shapes,
+		self.p_zx_mask_generators=construct_conditional_mask_generators(
+														n_channels=[DIMs[0] for DIMs in maskgenerator_input_shapes],
+														layer_dims=[DIMs[0]*DIMs[1]*DIMs[2] for DIMs in maskgenerator_input_shapes],
 														additional_input_dims=[0 for j in maskgenerator_input_shapes],
 														hiddens=hiddens).to(device)#p(z|x)
 
@@ -283,8 +285,7 @@ class ResNet_GFN(nn.Module):
 			for layer in [self.resnet.layer1,self.resnet.layer2,self.resnet.layer3,self.resnet.layer4]:#number of layers changes over architecture
 
 				for blockid in range(2):##number block per layer changes over architecture
-					
-					
+								
 					
 					identity=x
 					out=layer[blockid].conv1(x)
@@ -299,17 +300,18 @@ class ResNet_GFN(nn.Module):
 
 						identity = layer[blockid].downsample(x)
 
-
+					
 					#print("self.training",self.training)
 
 					#####different masks generator
-					if block_idx>=6:
+					if block_idx>=0: #how many to dropout is a design choice, this version all layers dropout
 						
 
 						####if using random masks
 						EPSILON=random.uniform(0,1)
 			
-						layer_idx=block_idx-6
+						#layer_idx=block_idx-6
+						layer_idx=block_idx
 
 						if ("bottomup" in mask):
 
@@ -363,17 +365,19 @@ class ResNet_GFN(nn.Module):
 										previous_actual_mask=[]#use previous actual masks
 										for j in range(layer_idx):
 											previous_actual_mask.append(actual_masks[j])
-
+										#print("layer_idx",layer_idx)
+										#print("out",out.shape)
+										#print("actual_masks[j]",actual_masks[j].shape)
 										###calculate p(z|x;xi)
-										input_pzx=torch.cat(previous_actual_mask+[x.clone().detach().reshape(x.shape[0],-1)],1)
-
+										input_pzx=torch.cat(previous_actual_mask+[out.clone().detach().reshape(out.shape[0],-1)],1)
+										#print("input_pzx",input_pzx.shape,x.shape)
 										m_conditional_l= self.p_zx_mask_generators[layer_idx](input_pzx)#generate mask based on activation from previous layer, detach from BNN training
 
 
 									masks_conditional.append(m_conditional_l)
 
 						else:
-								masks_conditional.append(torch.ones(x.shape).to(device))
+								masks_conditional.append(torch.ones(out.shape).to(device))
 
 							
 
@@ -973,6 +977,7 @@ def construct_unconditional_mask_generators(
 
 
 def construct_conditional_mask_generators(
+		n_channels,
 		layer_dims,
 		additional_input_dims,
 		hiddens=None,
@@ -982,16 +987,16 @@ def construct_conditional_mask_generators(
 	for layer_idx in range(len(layer_dims)):
 
 		if layer_idx==0:
-			in_dim=layer_dims[layer_idx][0]*layer_dims[layer_idx][1]*layer_dims[layer_idx][2]+additional_input_dims[layer_idx]
-			out_dim=layer_dims[layer_idx][0]
+			in_dim=layer_dims[0]+additional_input_dims[layer_idx]
+			out_dim=n_channels[0]
 		
 		else:
-			in_dim=additional_input_dims[layer_idx]
+			in_dim=layer_dims[layer_idx]
 			for j in range(layer_idx):
-				 in_dim+=layer_dims[j][0]
-			in_dim+=layer_dims[layer_idx][0]*layer_dims[layer_idx][1]*layer_dims[layer_idx][2]
-
-			out_dim=layer_dims[layer_idx][0]
+				 in_dim+=n_channels[j]
+				 in_dim+=additional_input_dims[j]
+			
+			out_dim=n_channels[layer_idx]
 
 		mask_generators.append(
 			MLPMaskGenerator(

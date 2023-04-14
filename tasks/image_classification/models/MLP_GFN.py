@@ -378,6 +378,7 @@ class MLP_GFN(nn.Module):
 			#rescale the output
 			if mask!="none":
 				multipliers = m.shape[1] / (m.sum(1) + 1e-6)
+				x_beforemasking = x.clone().detach() #will be used for log p calculation
 				x = torch.mul((x * m).T, multipliers).T
 
 			actual_masks.append(m)
@@ -387,7 +388,7 @@ class MLP_GFN(nn.Module):
 			if layer_idx==0:
 				
 				###calculate p(z|x;xi)
-				Log_P_zx_l = self.p_zx_mask_generators[layer_idx].log_prob(x.clone().detach(),m)
+				Log_P_zx_l = self.p_zx_mask_generators[layer_idx].log_prob(x_beforemasking.clone().detach(),m)
 				#calculate p(z)
 				Log_P_z_l = self.p_z_mask_generators.log_prob(m,m)
 				
@@ -397,7 +398,7 @@ class MLP_GFN(nn.Module):
 					previous_actual_mask.append(actual_masks[j])
 
 				###calculate p(z|x;xi)
-				input_pzx=torch.cat(previous_actual_mask+[x.clone().detach()],1)
+				input_pzx=torch.cat(previous_actual_mask+[x_beforemasking.clone().detach()],1)
 
 				Log_P_zx_l = self.p_zx_mask_generators[layer_idx].log_prob(input_pzx,m)#generate mask based on activation from previous layer, detach from BNN training
 
@@ -733,7 +734,7 @@ class MLPMaskGenerator(nn.Module):
 		return torch.bernoulli(probs_sampled)
 
 	def log_prob(self, x, m):
-		dist = self._dist(x)
+		dist = self._dist(x,1.0)
 		probs = dist * m + (1. - dist) * (1. - m)
 		return torch.log(probs).sum(1)
 
@@ -804,7 +805,7 @@ class multiMLPMaskGenerator(nn.Module):
 		return torch.bernoulli(probs_sampled)
 
 	def log_prob(self, x1,x2,x3, m):
-		dist = self._dist(x1,x2)
+		dist = self._dist(x1,x2,1.0)
 		probs = dist * m + (1. - dist) * (1. - m)
 		return torch.log(probs).sum(1)
 

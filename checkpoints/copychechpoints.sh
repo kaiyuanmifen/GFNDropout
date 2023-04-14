@@ -117,25 +117,44 @@ for filename in ./* ; do
     echo "$filename"        
     echo ${filename##*_}
     #seed=${filename##*_}
-    seed="$(cut -d'_' -f9 <<<${filename})"
-    echo seed
+
+    # seed="$(cut -d'_' -f9 <<<${filename})"
+    # echo seed
     #subsetsize="$(cut -d'_' -f10 <<<${filename})"
     #echo $subsetsize
     ###decide folder
     if [[ $filename == *"cifar10_"* ]];then
         folder="cifar10"
         echo $folder
+
+        seed="$(cut -d'_' -f9 <<<${filename})"
+        echo seed
     fi
 
     if [[ $filename == *"cifar100_"* ]];then
         folder="cifar100"
         echo $folder
+
+        seed="$(cut -d'_' -f9 <<<${filename})"
+        echo seed
     fi
  
     if [[ $filename == *"mnist_"* ]];then
         folder="MNIST"
         echo $folder
+
+        seed="$(cut -d'_' -f11 <<<${filename})"
+        echo seed
     fi
+
+    if [[ $filename == *"MNIST"* ]];then
+        folder="MNIST"
+        echo $folder
+
+        seed="$(cut -d'_' -f11 <<<${filename})"
+        echo seed
+    fi
+
 
     ##decide name
     if [[ $filename == *"random_"* ]];then

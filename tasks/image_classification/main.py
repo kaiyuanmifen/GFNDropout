@@ -48,7 +48,7 @@ vis = None
 
 
 def image_augmentation(inputs):
-    inputs = inputs.squeeze()
+    inputs = inputs.squeeze().cpu()
     #im = transforms.ToPILImage()(inputs)
     #im=inputs
     if len(inputs.shape)==2:# if single color image
@@ -56,13 +56,19 @@ def image_augmentation(inputs):
         inputs=inputs.unsqueeze(0).repeat(3,1,1)
     else:
         bwimage=False
+    import random
+    # i=random.randint(0, 18)
+    # angle=i*360.0/20.0
+    # im = transforms.ToPILImage()(inputs)
+    # grouped_z1_pil = torchvision.transforms.functional.rotate(im, float(angle))
+    #output_tensor = torchvision.transforms.ToTensor()(grouped_z1_pil)
     grouped_z1_pil = transforms.RandomRotation(degrees=(0,360))(inputs)
     #grouped_z1_pil = transforms.GaussianBlur(kernel_size=(5, 9), sigma=(5.0))(inputs)
     
     #grouped_z1_pil = transforms.GaussianBlur(kernel_size=(5, 9), sigma=(0.1, 0.5))(im)
-    #output_tensor = torchvision.transforms.ToTensor()(grouped_z1_pil)
+    output_tensor = torchvision.transforms.ToTensor()(grouped_z1_pil)
     #output_tensor = torchvision.transforms.ToTensor()(im)
-    output_tensor =grouped_z1_pil
+    #output_tensor =grouped_z1_pil
     if bwimage:
         output_tensor=output_tensor[0,:,:]
     return output_tensor
