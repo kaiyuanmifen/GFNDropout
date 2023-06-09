@@ -1,7 +1,7 @@
 # GFNDropout
 
-This is the code for GFN dropout project , currently it include codes for MLP and resnet for MNIST and CIFAR
-dataset
+This is the code for GFN dropout project , currently it include codes for MLP and resnet for MNIST,CIFAR
+dataset and transformer for VQA task
 
 This code is partially adapted from :https://github.com/szhang42/Contextual_dropout_release
 
